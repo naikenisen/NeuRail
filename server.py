@@ -282,6 +282,20 @@ def clean_string_for_file(name):
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
 
 
+def unique_eml_filename_from_subject(subject, prefix=""):
+    """Build a unique .eml filename from subject with _1, _2... suffixes."""
+    safe_subject = clean_string_for_file(subject)[:120] or "mail"
+    if prefix:
+        safe_subject = f"{prefix}{safe_subject}"
+
+    candidate = f"{safe_subject}.eml"
+    index = 1
+    while os.path.exists(os.path.join(MAILS_DIR, candidate)):
+        candidate = f"{safe_subject}_{index}.eml"
+        index += 1
+    return candidate
+
+
 def extract_text_body(msg):
     """Extract text body from a parsed email message."""
     body_content = ""
@@ -427,15 +441,13 @@ def fetch_pop3(account):
 
                 mail_id = compute_mail_id(raw_bytes)
 
-                # Save raw .eml to MAILS_DIR
-                safe_id = mail_id[:16]
-                eml_filename = f"{safe_id}.eml"
+                meta = parse_email_metadata(raw_bytes, account_email)
+                eml_filename = unique_eml_filename_from_subject(meta.get("subject", "mail"))
                 eml_path = os.path.join(MAILS_DIR, eml_filename)
                 with open(eml_path, "wb") as f:
                     f.write(raw_bytes)
 
                 # Parse metadata
-                meta = parse_email_metadata(raw_bytes, account_email)
                 meta["id"] = mail_id
                 meta["uid"] = uid
                 meta["eml_file"] = eml_filename
@@ -523,15 +535,13 @@ def fetch_imap(account):
                 raw_bytes = msg_data[0][1]
                 mail_id = compute_mail_id(raw_bytes)
 
-                # Save raw .eml
-                safe_id = mail_id[:16]
-                eml_filename = f"{safe_id}.eml"
+                meta = parse_email_metadata(raw_bytes, account_email)
+                eml_filename = unique_eml_filename_from_subject(meta.get("subject", "mail"))
                 eml_path = os.path.join(MAILS_DIR, eml_filename)
                 with open(eml_path, "wb") as f:
                     f.write(raw_bytes)
 
                 # Parse metadata
-                meta = parse_email_metadata(raw_bytes, account_email)
                 meta["id"] = mail_id
                 meta["uid"] = uid
                 meta["eml_file"] = eml_filename
@@ -771,10 +781,9 @@ def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=Non
     server.sendmail(from_addr, all_recipients, raw_msg)
     server.quit()
 
-    # Save sent email locally as .eml in MAILS_DIR
+    # Save sent email locally as .eml in MAILS_DIR using subject as filename
     mail_id = compute_mail_id(raw_bytes)
-    safe_id = mail_id[:16]
-    eml_filename = f"sent_{safe_id}.eml"
+    eml_filename = unique_eml_filename_from_subject(subject)
     eml_path = os.path.join(MAILS_DIR, eml_filename)
     with open(eml_path, "wb") as f:
         f.write(raw_bytes)

@@ -41,6 +41,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-size: 1.04rem;
             background: var(--bg);
             color: var(--text);
             line-height: 1.6;
@@ -135,7 +136,7 @@
         }
 
         /* ─── Layout ─────────────────────────────────── */
-        .container { max-width: 900px; margin: 0 auto; }
+        .container { max-width: min(96vw, 1320px); margin: 0 auto; }
 
         /* ─── Tabs ───────────────────────────────────── */
         .tab-bar {
