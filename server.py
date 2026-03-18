@@ -6,6 +6,7 @@ import http.server
 import json
 import os
 import subprocess
+import time
 import urllib.request
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -54,62 +55,38 @@ def load_contacts():
     return contacts
 
 
-def ai_call(token, prompt):
-    """Generic AI call via GitHub Models API."""
+def ai_call(token, prompt, retries=3):
+    """Generic AI call via OpenAI API with retry on 429."""
     body = json.dumps({
-        "model": "gpt-4o",
+        "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3,
     }).encode()
 
-    req = urllib.request.Request(
-        "https://models.inference.ai.azure.com/chat/completions",
-        data=body,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-    )
-
-    with urllib.request.urlopen(req, timeout=60) as r:
-        result = json.loads(r.read())
-
-    return result["choices"][0]["message"]["content"]
-
-
-def ai_organize(payload):
-    token = payload.get("token", "")
-    sections = payload.get("sections", [])
-
-    lines = []
-    for s in sections:
-        lines.append(f"\n## {s.get('emoji', '')} {s.get('title', '')}")
-        if s.get("description"):
-            lines.append(f"   {s['description']}")
-        for t in s.get("tasks", []):
-            mark = "x" if t.get("done") else " "
-            indent = "  " * t.get("indent", 0)
-            line = f"{indent}- [{mark}] {t.get('label', '')}"
-            if t.get("note"):
-                line += f"  (Note: {t['note']})"
-            lines.append(line)
-
-    prompt = (
-        "Tu es un assistant d'organisation. Voici une todo-list.\n"
-        "Réorganise, reformule clairement et trie les tâches en sections logiques.\n"
-        "Conserve le statut fait/pas fait de chaque tâche.\n"
-        "Propose un emoji approprié pour chaque section.\n"
-        "Réponds UNIQUEMENT en JSON valide (sans balises markdown) avec cette structure :\n"
-        '{"sections":[{"emoji":"📞","title":"...","badge":"...","color":"blue|orange|green|purple|pink|slate",'
-        '"description":"...","tasks":[{"label":"...","note":"","done":false,"indent":0}]}]}\n\n'
-        + "\n".join(lines)
-    )
-
-    content = ai_call(token, prompt)
-    if "```" in content:
-        content = content.split("```json")[-1] if "```json" in content else content.split("```")[1]
-        content = content.split("```")[0]
-    return json.loads(content.strip())
+    for attempt in range(retries):
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                result = json.loads(r.read())
+            return result["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < retries - 1:
+                wait = int(e.headers.get("Retry-After", 2 ** (attempt + 1)))
+                time.sleep(wait)
+                continue
+            error_body = e.read().decode()
+            try:
+                msg = json.loads(error_body).get("error", {}).get("message", error_body)
+            except Exception:
+                msg = error_body
+            raise RuntimeError(f"OpenAI {e.code}: {msg}")
 
 
 def ai_reformulate(payload):
@@ -189,13 +166,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/api/state":
             save(data)
             return self._json({"ok": True})
-
-        if self.path == "/api/organize":
-            try:
-                result = ai_organize(data)
-                return self._json(result)
-            except Exception as e:
-                return self._json({"error": str(e)}, 500)
 
         if self.path == "/api/run-v3":
             v3_path = os.path.join(DIR, "v3.py")

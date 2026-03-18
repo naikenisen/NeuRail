@@ -476,9 +476,9 @@
     <div class="modal">
         <h2>⚙️ Paramètres</h2>
         <div class="form-group">
-            <label>Token GitHub (pour l'IA)</label>
-            <input type="password" id="githubTokenInput" placeholder="ghp_... ou github_pat_...">
-            <small>Nécessaire pour « Organiser » et « Reformuler ». Stocké dans data.json.</small>
+            <label>Clé API OpenAI</label>
+            <input type="password" id="openaiKeyInput" placeholder="sk-...">
+            <small>Nécessaire pour « Reformuler ». Stockée dans data.json.</small>
         </div>
         <div class="modal-actions">
             <button onclick="closeSettings()">Annuler</button>
@@ -514,7 +514,7 @@
 <!-- Loading Overlay -->
 <div class="loading-overlay" id="loading">
     <div class="loading-spinner"></div>
-    <p id="loadingText">L'IA réorganise tes tâches…</p>
+    <p id="loadingText">Chargement…</p>
 </div>
 
 <!-- Toast -->
@@ -524,7 +524,7 @@
 /* ═══════════════════════════════════════════════════════
    State & Config
    ═══════════════════════════════════════════════════════ */
-let state = { sections: [], settings: { githubToken: '' }, reminders: [] };
+let state = { sections: [], settings: { openaiKey: '' }, reminders: [] };
 let editMode = false;
 let editingSectionId = null;
 let dragData = null;
@@ -586,7 +586,7 @@ async function loadState() {
         } catch {}
     }
     if (!state.sections) state.sections = [];
-    if (!state.settings) state.settings = { githubToken: '' };
+    if (!state.settings) state.settings = { openaiKey: '' };
     if (!state.reminders) state.reminders = [];
 }
 
@@ -633,7 +633,6 @@ function renderHeader() {
             <button onclick="toggleEdit()" class="${editMode ? 'active' : ''}">
                 ${editMode ? '✅ Terminer' : '✏️ Éditer'}
             </button>
-            <button onclick="organize()">🤖 Organiser</button>
             <button onclick="openSettings()">⚙️</button>
         </div>
     </header>`;
@@ -998,7 +997,7 @@ function saveSectionModal() {
    Settings Modal
    ═══════════════════════════════════════════════════════ */
 function openSettings() {
-    document.getElementById('githubTokenInput').value = state.settings.githubToken || '';
+    document.getElementById('openaiKeyInput').value = state.settings.openaiKey || '';
     document.getElementById('settingsModal').classList.add('show');
 }
 
@@ -1007,59 +1006,10 @@ function closeSettings() {
 }
 
 function saveSettings() {
-    state.settings.githubToken = document.getElementById('githubTokenInput').value.trim();
+    state.settings.openaiKey = document.getElementById('openaiKeyInput').value.trim();
     closeSettings();
     autoSave();
     showToast('Paramètres sauvegardés', 'success');
-}
-
-/* ═══════════════════════════════════════════════════════
-   AI Organize
-   ═══════════════════════════════════════════════════════ */
-async function organize() {
-    if (!state.settings.githubToken) {
-        showToast('Configure ton token GitHub dans ⚙️', 'error', 3000);
-        openSettings();
-        return;
-    }
-    if (!state.sections.length) {
-        showToast('Aucune tâche à organiser.', 'error');
-        return;
-    }
-    if (!confirm("L'IA va réorganiser toutes tes tâches. Continuer ?")) return;
-
-    showLoading('L\'IA réorganise tes tâches…');
-    try {
-        const r = await fetch('/api/organize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: state.settings.githubToken, sections: state.sections })
-        });
-        const result = await r.json();
-        if (result.error) {
-            showToast('Erreur IA : ' + result.error, 'error', 5000);
-            return;
-        }
-        if (result.sections) {
-            result.sections.forEach(s => {
-                if (!s.id) s.id = uid();
-                s.collapsed = false;
-                (s.tasks || []).forEach(t => {
-                    if (!t.id) t.id = uid();
-                    if (t.indent === undefined) t.indent = 0;
-                    if (t.done === undefined) t.done = false;
-                });
-            });
-            state.sections = result.sections;
-            render();
-            autoSave();
-            showToast('Tâches réorganisées !', 'success');
-        }
-    } catch (e) {
-        showToast('Erreur : ' + e.message, 'error', 5000);
-    } finally {
-        hideLoading();
-    }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1148,8 +1098,8 @@ document.addEventListener('click', e => {
 async function reformulateMail() {
     const body = document.getElementById('mailBody').value.trim();
     if (!body) { showToast('Écris un message d\'abord.', 'error'); return; }
-    if (!state.settings.githubToken) {
-        showToast('Configure ton token GitHub dans ⚙️', 'error', 3000);
+    if (!state.settings.openaiKey) {
+        showToast('Configure ta clé API OpenAI dans ⚙️', 'error', 3000);
         openSettings();
         return;
     }
@@ -1158,7 +1108,7 @@ async function reformulateMail() {
         const r = await fetch('/api/reformulate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: state.settings.githubToken, text: body })
+            body: JSON.stringify({ token: state.settings.openaiKey, text: body })
         });
         const result = await r.json();
         if (result.error) {
@@ -1271,8 +1221,8 @@ function dismissReminder(rid) {
 async function generateReminder(rid) {
     const r = (state.reminders || []).find(x => x.id === rid);
     if (!r) return;
-    if (!state.settings.githubToken) {
-        showToast('Configure ton token GitHub dans ⚙️', 'error', 3000);
+    if (!state.settings.openaiKey) {
+        showToast('Configure ta clé API OpenAI dans ⚙️', 'error', 3000);
         openSettings();
         return;
     }
@@ -1282,7 +1232,7 @@ async function generateReminder(rid) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                token: state.settings.githubToken,
+                token: state.settings.openaiKey,
                 to: r.mailTo,
                 subject: r.mailSubject || r.label,
                 body: r.mailBody || r.note || r.label
