@@ -956,8 +956,9 @@
         <header>
             <h1><i class="icon-inbox"></i> Boîte de réception</h1>
             <div class="header-actions">
-                <button onclick="fetchEmails()"><i class="icon-refresh-cw"></i> Relever</button>
+                <button onclick="fetchEmails()"><i class="icon-refresh-cw"></i> Relever les mails</button>
                 <button onclick="openAccountsModal()"><i class="icon-user"></i> Comptes</button>
+                <button onclick="toggleInboxFolder()" id="inboxFolderBtn"><i class="icon-inbox"></i> Reçus</button>
                 <button onclick="exportAllObsidian()"><i class="icon-book-open"></i> Exporter Obsidian</button>
             </div>
         </header>
@@ -1020,6 +1021,16 @@
                 </div>
             </div>
             <div class="mail-field">
+                <label>Cc</label>
+                <div class="autocomplete-wrapper">
+                    <div class="email-tags-container" id="mailCcTags" onclick="document.getElementById('mailCcInput').focus()">
+                        <input type="text" class="email-tags-input" id="mailCcInput" placeholder="Cc (optionnel)…" autocomplete="off"
+                            oninput="onCcContactInput()" onfocus="onCcContactInput()" onkeydown="onCcTagKeydown(event)">
+                    </div>
+                    <div class="autocomplete-list" id="ccContactList"></div>
+                </div>
+            </div>
+            <div class="mail-field">
                 <label>Sujet</label>
                 <input type="text" id="mailSubject" placeholder="Sujet du mail">
             </div>
@@ -1027,11 +1038,18 @@
                 <label>Corps du message</label>
                 <textarea id="mailBody" placeholder="Rédigez votre mail ici…"></textarea>
             </div>
+            <div class="mail-field">
+                <label>Pièces jointes</label>
+                <div id="attachmentZone" style="border:1px dashed var(--card-border);border-radius:var(--radius-sm);padding:0.6rem;min-height:2.4rem;cursor:pointer;position:relative" onclick="document.getElementById('attachmentInput').click()">
+                    <input type="file" id="attachmentInput" multiple style="display:none" onchange="handleAttachmentFiles(this.files)">
+                    <div id="attachmentList" style="display:flex;flex-wrap:wrap;gap:0.4rem"></div>
+                    <p id="attachmentPlaceholder" style="color:var(--text-muted);font-size:0.78rem;margin:0;text-align:center">📎 Cliquer ou glisser des fichiers ici</p>
+                </div>
+            </div>
             <div class="mail-actions">
                 <button onclick="sendMailSMTP()" style="background:var(--accent-blue)!important;border-color:var(--accent-blue)!important;color:white!important"><i class="icon-send"></i> Envoyer</button>
                 <button class="accent-purple" onclick="reformulateMail()"><i class="icon-sparkles"></i> Reformuler</button>
-                <button class="accent-green" onclick="saveMailEml()"><i class="icon-save"></i> Enregistrer</button>
-                <button class="accent-orange" onclick="openInThunderbird()"><i class="icon-external-link"></i> Thunderbird</button>
+                <button class="accent-green" onclick="saveMailEml()"><i class="icon-save"></i> Enregistrer .eml</button>
             </div>
             <div class="mail-actions" id="mailSentActions" style="margin-top:0.5rem; display:none"></div>
         </div>
@@ -1157,7 +1175,7 @@
             <button onclick="closeReminderModal()">Annuler</button>
             <button class="accent-purple" onclick="reformulateReminder()"><i class="icon-sparkles"></i> Reformuler</button>
             <button class="accent-green" onclick="saveReminderEml()"><i class="icon-save"></i> .eml</button>
-            <button class="accent-orange" onclick="sendReminderThunderbird()"><i class="icon-external-link"></i> Thunderbird</button>
+            <button style="background:var(--accent-blue)!important;border-color:var(--accent-blue)!important;color:white!important" onclick="sendReminderSMTP()"><i class="icon-send"></i> Envoyer</button>
         </div>
         <div class="modal-actions" style="margin-top:0.5rem;">
             <button class="btn-sent-confirm" onclick="confirmReminderSent()"><i class="icon-check"></i> Rappel envoyé</button>
@@ -1169,7 +1187,7 @@
 <!-- Accounts Modal -->
 <div class="modal-overlay" id="accountsModal" onclick="if(event.target===this)closeAccountsModal()">
     <div class="modal" style="max-width:650px">
-        <h2><i class="icon-user"></i> Comptes POP3 / SMTP</h2>
+        <h2><i class="icon-user"></i> Comptes mail (POP3 / IMAP / SMTP)</h2>
         <div id="accountsList"></div>
         <button class="add-task-btn" onclick="addAccountForm()" style="margin-bottom:1rem">+ Ajouter un compte</button>
         <div class="modal-actions">
@@ -1186,7 +1204,7 @@
         <p style="color:var(--text-muted);margin-bottom:1rem" id="deleteMailSubject"></p>
         <div class="form-group">
             <label>
-                <input type="checkbox" id="deleteOnServer"> Supprimer aussi sur le serveur POP3
+                <input type="checkbox" id="deleteOnServer"> Supprimer aussi sur le serveur distant
             </label>
         </div>
         <div class="modal-actions">
@@ -1708,6 +1726,7 @@ function saveSettings() {
    Contact Autocomplete (multi-recipient)
    ═══════════════════════════════════════════════════════ */
 let mailRecipients = [];
+let mailCcRecipients = [];
 
 function renderMailTags() {
     const container = document.getElementById('mailToTags');
@@ -1723,6 +1742,20 @@ function renderMailTags() {
     });
 }
 
+function renderCcTags() {
+    const container = document.getElementById('mailCcTags');
+    const input = document.getElementById('mailCcInput');
+    container.querySelectorAll('.email-tag').forEach(t => t.remove());
+    mailCcRecipients.forEach((email, i) => {
+        const tag = document.createElement('span');
+        tag.className = 'email-tag';
+        const c = contacts.find(c => c.email === email);
+        tag.innerHTML = `${esc(c ? c.name : email)}<span class="tag-remove" onclick="removeCcRecipient(${i})">&times;</span>`;
+        tag.title = email;
+        container.insertBefore(tag, input);
+    });
+}
+
 function addRecipient(email) {
     email = email.trim();
     if (!email || mailRecipients.includes(email)) return;
@@ -1733,13 +1766,32 @@ function addRecipient(email) {
     document.getElementById('contactList').classList.remove('show');
 }
 
+function addCcRecipient(email) {
+    email = email.trim();
+    if (!email || mailCcRecipients.includes(email)) return;
+    mailCcRecipients.push(email);
+    renderCcTags();
+    const input = document.getElementById('mailCcInput');
+    input.value = '';
+    document.getElementById('ccContactList').classList.remove('show');
+}
+
 function removeRecipient(index) {
     mailRecipients.splice(index, 1);
     renderMailTags();
 }
 
+function removeCcRecipient(index) {
+    mailCcRecipients.splice(index, 1);
+    renderCcTags();
+}
+
 function getMailToValue() {
     return mailRecipients.join(', ');
+}
+
+function getMailCcValue() {
+    return mailCcRecipients.join(', ');
 }
 
 function onContactInput() {
@@ -1765,6 +1817,10 @@ function selectContact(email) {
     addRecipient(email);
 }
 
+function selectCcContact(email) {
+    addCcRecipient(email);
+}
+
 function onTagKeydown(e) {
     const input = document.getElementById('mailToInput');
     if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && input.value.trim()) {
@@ -1776,11 +1832,44 @@ function onTagKeydown(e) {
     }
 }
 
+function onCcContactInput() {
+    const input = document.getElementById('mailCcInput');
+    const list = document.getElementById('ccContactList');
+    const val = input.value.toLowerCase().trim();
+    if (!val || val.length < 1) { list.classList.remove('show'); return; }
+    const allUsed = [...mailRecipients, ...mailCcRecipients];
+    const matches = contacts.filter(c =>
+        !allUsed.includes(c.email) &&
+        (c.name.toLowerCase().includes(val) || c.email.toLowerCase().includes(val))
+    ).slice(0, 10);
+    if (!matches.length) { list.classList.remove('show'); return; }
+    list.innerHTML = matches.map(c =>
+        `<div class="autocomplete-item" onclick="selectCcContact('${esc(c.email)}')">
+            <span class="ac-name">${esc(c.name)}</span>
+            <span class="ac-email">${esc(c.email)}</span>
+        </div>`
+    ).join('');
+    list.classList.add('show');
+}
+
+function onCcTagKeydown(e) {
+    const input = document.getElementById('mailCcInput');
+    if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && input.value.trim()) {
+        e.preventDefault();
+        addCcRecipient(input.value.replace(/,/g, '').trim());
+    }
+    if (e.key === 'Backspace' && !input.value && mailCcRecipients.length) {
+        removeCcRecipient(mailCcRecipients.length - 1);
+    }
+}
+
 // Close autocomplete on outside click
 document.addEventListener('click', e => {
     if (!e.target.closest('.autocomplete-wrapper')) {
         const list = document.getElementById('contactList');
         if (list) list.classList.remove('show');
+        const ccList = document.getElementById('ccContactList');
+        if (ccList) ccList.classList.remove('show');
     }
 });
 
@@ -1839,28 +1928,7 @@ async function saveMailEml() {
     }
 }
 
-async function openInThunderbird() {
-    const from = document.getElementById('mailFrom').value;
-    const to = getMailToValue();
-    const subject = document.getElementById('mailSubject').value.trim();
-    const body = document.getElementById('mailBody').value.trim();
-    if (!to || !subject) { showToast('Remplis le(s) destinataire(s) et le sujet.', 'error'); return; }
-    try {
-        const r = await fetch('/api/open-thunderbird', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from, to, subject, body })
-        });
-        const result = await r.json();
-        if (result.ok) {
-            showToast('Thunderbird ouvert !', 'success');
-        } else {
-            showToast('Erreur : ' + (result.error || 'Échec'), 'error', 5000);
-        }
-    } catch (e) {
-        showToast('Erreur : ' + e.message, 'error', 5000);
-    }
-}
+/* openInThunderbird removed — all sending goes through SMTP */
 
 /* ═══════════════════════════════════════════════════════
    Run v3.py
@@ -2017,7 +2085,9 @@ function selectMailForCompose(sid, tid) {
 function deselectMailTask() {
     selectedMailTask = null;
     mailRecipients = [];
+    mailCcRecipients = [];
     renderMailTags();
+    renderCcTags();
     document.getElementById('mailSubject').value = '';
     document.getElementById('mailBody').value = '';
     updateMailComposerState();
@@ -2532,25 +2602,33 @@ async function saveReminderEml() {
     }
 }
 
-async function sendReminderThunderbird() {
+async function sendReminderSMTP() {
     const to = document.getElementById('reminderTo').value.trim();
     const subject = document.getElementById('reminderSubject').value.trim();
     const body = document.getElementById('reminderBody').value.trim();
-    if (!subject) { showToast('Sujet requis', 'error'); return; }
+    const from = currentReminder?.from || document.getElementById('mailFrom').value;
+    if (!subject || !to) { showToast('Destinataire et sujet requis', 'error'); return; }
+    showLoading('Envoi de la relance via SMTP…');
     try {
-        const r = await fetch('/api/open-thunderbird', {
+        const r = await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to, subject, body })
+            body: JSON.stringify({ from, to, subject, body })
         });
         const result = await r.json();
         if (result.ok) {
-            showToast('Thunderbird ouvert !', 'success');
+            showToast('Relance envoyée !', 'success');
+            if (currentReminder) {
+                markReminderSent(currentReminder.rid);
+                closeReminderModal();
+            }
         } else {
             showToast('Erreur : ' + (result.error || 'Échec'), 'error', 5000);
         }
     } catch (e) {
         showToast('Erreur : ' + e.message, 'error', 5000);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -2636,17 +2714,36 @@ let inboxMails = [];
 let selectedInboxId = null;
 let inboxFilter = 'all';
 let deleteMailTarget = null;
+let inboxFolder = 'inbox'; // 'inbox' or 'sent'
 
 /* ═══════════════════════════════════════════════════════
    Inbox — Load & Render
    ═══════════════════════════════════════════════════════ */
 async function loadInbox() {
     try {
-        const r = await fetch('/api/inbox');
+        const endpoint = inboxFolder === 'sent' ? '/api/inbox/sent' : '/api/inbox';
+        const r = await fetch(endpoint);
         if (r.ok) inboxMails = await r.json();
     } catch {}
     renderInboxList();
     updateInboxBadge();
+}
+
+function toggleInboxFolder() {
+    inboxFolder = inboxFolder === 'inbox' ? 'sent' : 'inbox';
+    const btn = document.getElementById('inboxFolderBtn');
+    if (btn) {
+        btn.innerHTML = inboxFolder === 'sent'
+            ? '<i class="icon-send"></i> Envoyés'
+            : '<i class="icon-inbox"></i> Reçus';
+    }
+    selectedInboxId = null;
+    document.getElementById('inboxReader').innerHTML = `
+        <div class="inbox-reader-empty">
+            <i class="icon-mail-open" style="font-size:2.5rem;color:var(--text-muted)"></i>
+            <p>Sélectionne un mail pour le lire</p>
+        </div>`;
+    loadInbox();
 }
 
 function filterInbox() {
@@ -2695,7 +2792,8 @@ function renderInboxList() {
     container.innerHTML = mails.map(m => {
         const isSelected = selectedInboxId === m.id;
         const unread = !m.read ? 'unread' : '';
-        const fromDisplay = m.from_name || m.from_email || 'Inconnu';
+        const isSent = m.folder === 'sent';
+        const fromDisplay = isSent ? ('→ ' + (m.to || '').split(',')[0].trim()) : (m.from_name || m.from_email || 'Inconnu');
         const preview = (m.body || '').substring(0, 80).replace(/\n/g, ' ');
         const hasAttach = m.attachments && m.attachments.length > 0;
 
@@ -2760,9 +2858,11 @@ function renderInboxReader(mail) {
                 ${mail.cc ? `<span><strong>Cc :</strong> ${esc(mail.cc)}</span>` : ''}
                 <span><strong>Date :</strong> ${esc(mail.date || '')}</span>
                 <span><strong>Compte :</strong> ${esc(mail.account || '')}</span>
+                ${mail.folder === 'sent' ? '<span style="color:var(--accent-green);font-weight:600">📤 Envoyé</span>' : ''}
             </div>
             <div class="inbox-reader-actions">
                 <button onclick="replyToMail('${esc(mail.id)}')"><i class="icon-reply"></i> Répondre</button>
+                <button onclick="replyToMail('${esc(mail.id)}', true)"><i class="icon-reply"></i> Répondre à tous</button>
                 <button onclick="forwardMail('${esc(mail.id)}')"><i class="icon-forward"></i> Transférer</button>
                 <button onclick="exportMailObsidian('${esc(mail.id)}')"><i class="icon-book-open"></i> Exporter</button>
                 <button onclick="toggleInboxRead('${esc(mail.id)}')">${mail.read ? '<i class="icon-mail-open"></i> Marquer non lu' : '<i class="icon-mail"></i> Marquer lu'}</button>
@@ -2780,7 +2880,7 @@ async function fetchEmails() {
     const statusEl = document.getElementById('inbox-status');
     statusEl.style.display = 'block';
     statusEl.className = 'inbox-status loading';
-    statusEl.textContent = 'Connexion aux serveurs POP3…';
+    statusEl.textContent = 'Connexion aux serveurs (POP3/IMAP)…';
 
     try {
         const r = await fetch('/api/fetch-emails', { method: 'POST' });
@@ -2831,15 +2931,31 @@ async function toggleInboxRead(mailId) {
     updateInboxBadge();
 }
 
-function replyToMail(mailId) {
+function replyToMail(mailId, replyAll) {
     const mail = inboxMails.find(m => m.id === mailId);
     if (!mail) return;
     switchTab('mail');
     // Pre-fill composer
     mailRecipients = mail.from_email ? [mail.from_email] : [];
+    mailCcRecipients = [];
+
+    if (replyAll) {
+        // Add all To: recipients (except our account) to To
+        const toAddrs = (mail.to || '').split(',').map(e => e.trim()).filter(e => e && e !== mail.account);
+        toAddrs.forEach(addr => {
+            if (!mailRecipients.includes(addr)) mailRecipients.push(addr);
+        });
+        // Add CC recipients
+        if (mail.cc) {
+            const ccAddrs = mail.cc.split(',').map(e => e.trim()).filter(e => e && e !== mail.account);
+            mailCcRecipients = ccAddrs;
+        }
+    }
+
     renderMailTags();
-    document.getElementById('mailSubject').value = 'Re: ' + (mail.subject || '');
-    const quotedBody = '\n\n---\n' + (mail.body || '');
+    renderCcTags();
+    document.getElementById('mailSubject').value = 'Re: ' + (mail.subject || '').replace(/^Re:\s*/i, '');
+    const quotedBody = '\n\n--- Le ' + (mail.date || '') + ', ' + (mail.from_name || mail.from_email || '') + ' a écrit :\n' + (mail.body || '');
     document.getElementById('mailBody').value = quotedBody;
     // Try to match account
     const fromSel = document.getElementById('mailFrom');
@@ -2848,6 +2964,7 @@ function replyToMail(mailId) {
             if (fromSel.options[i].value === mail.account) { fromSel.selectedIndex = i; break; }
         }
     }
+    document.getElementById('mailBody').focus();
 }
 
 function forwardMail(mailId) {
@@ -2855,11 +2972,15 @@ function forwardMail(mailId) {
     if (!mail) return;
     switchTab('mail');
     mailRecipients = [];
+    mailCcRecipients = [];
     renderMailTags();
-    document.getElementById('mailSubject').value = 'Fwd: ' + (mail.subject || '');
+    renderCcTags();
+    document.getElementById('mailSubject').value = 'Fwd: ' + (mail.subject || '').replace(/^Fwd:\s*/i, '');
     const fwdBody = '\n\n--- Mail transféré ---\n'
         + 'De : ' + (mail.from_name || '') + ' <' + (mail.from_email || '') + '>\n'
         + 'Date : ' + (mail.date || '') + '\n'
+        + 'À : ' + (mail.to || '') + '\n'
+        + (mail.cc ? 'Cc : ' + mail.cc + '\n' : '')
         + 'Sujet : ' + (mail.subject || '') + '\n\n'
         + (mail.body || '');
     document.getElementById('mailBody').value = fwdBody;
@@ -2998,8 +3119,19 @@ function renderAccountsList() {
             <button class="account-delete" onclick="removeAccount(${i})" title="Supprimer">✕</button>
             <div class="form-group">
                 <label>Adresse email</label>
-                <input type="text" value="${esc(acc.email || '')}" onchange="accountsData[${i}].email=this.value" placeholder="user@example.com">
+                <div style="display:flex;gap:0.4rem">
+                    <input type="text" value="${esc(acc.email || '')}" onchange="accountsData[${i}].email=this.value" placeholder="user@example.com" style="flex:1" id="accEmail_${i}">
+                    <button onclick="autoconfigAccount(${i})" style="white-space:nowrap;padding:0.3rem 0.6rem;background:var(--accent-purple);color:white;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:0.72rem" title="Auto-détecter les paramètres">⚡ Autoconfig</button>
+                </div>
             </div>
+            <div class="form-group">
+                <label>Protocole de réception</label>
+                <select onchange="accountsData[${i}].protocol=this.value;renderAccountsList()" style="width:100%;background:var(--bg-surface);border:1px solid var(--card-border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;color:var(--text);font-size:0.78rem;cursor:pointer">
+                    <option value="pop3" ${(acc.protocol||'pop3')==='pop3'?'selected':''}>POP3</option>
+                    <option value="imap" ${acc.protocol==='imap'?'selected':''}>IMAP</option>
+                </select>
+            </div>
+            ${(acc.protocol||'pop3') === 'pop3' ? `
             <div class="form-row">
                 <div class="form-group">
                     <label>Serveur POP3</label>
@@ -3009,7 +3141,24 @@ function renderAccountsList() {
                     <label>Port POP3</label>
                     <input type="number" value="${acc.pop3_port || 995}" onchange="accountsData[${i}].pop3_port=parseInt(this.value)">
                 </div>
+            </div>` : `
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Serveur IMAP</label>
+                    <input type="text" value="${esc(acc.imap_server || '')}" onchange="accountsData[${i}].imap_server=this.value" placeholder="imap.gmail.com">
+                </div>
+                <div class="form-group">
+                    <label>Port IMAP</label>
+                    <input type="number" value="${acc.imap_port || 993}" onchange="accountsData[${i}].imap_port=parseInt(this.value)">
+                </div>
             </div>
+            <div class="form-group">
+                <label>Après téléchargement</label>
+                <select onchange="accountsData[${i}].imap_post_action=this.value" style="width:100%;background:var(--bg-surface);border:1px solid var(--card-border);border-radius:var(--radius-sm);padding:0.35rem 0.5rem;color:var(--text);font-size:0.78rem;cursor:pointer">
+                    <option value="mark_read" ${(acc.imap_post_action||'mark_read')==='mark_read'?'selected':''}>Marquer comme lus (conserver sur le serveur)</option>
+                    <option value="delete" ${acc.imap_post_action==='delete'?'selected':''}>Supprimer du serveur</option>
+                </select>
+            </div>`}
             <div class="form-row">
                 <div class="form-group">
                     <label>Serveur SMTP</label>
@@ -3031,10 +3180,15 @@ function renderAccountsList() {
                 </div>
             </div>
             <div class="form-row">
+                ${(acc.protocol||'pop3') === 'pop3' ? `
                 <label class="account-toggle">
                     <input type="checkbox" ${acc.pop3_ssl !== false ? 'checked' : ''} onchange="accountsData[${i}].pop3_ssl=this.checked">
                     POP3 SSL
-                </label>
+                </label>` : `
+                <label class="account-toggle">
+                    <input type="checkbox" ${acc.imap_ssl !== false ? 'checked' : ''} onchange="accountsData[${i}].imap_ssl=this.checked">
+                    IMAP SSL
+                </label>`}
                 <label class="account-toggle">
                     <input type="checkbox" ${acc.smtp_starttls !== false ? 'checked' : ''} onchange="accountsData[${i}].smtp_starttls=this.checked">
                     SMTP STARTTLS
@@ -3054,7 +3208,9 @@ function renderAccountsList() {
 
 function addAccountForm() {
     accountsData.push({
-        email: '', pop3_server: '', pop3_port: 995, pop3_ssl: true,
+        email: '', protocol: 'imap',
+        pop3_server: '', pop3_port: 995, pop3_ssl: true,
+        imap_server: '', imap_port: 993, imap_ssl: true, imap_post_action: 'mark_read',
         smtp_server: '', smtp_port: 587, smtp_starttls: true, smtp_ssl: false,
         username: '', password: '', enabled: true
     });
@@ -3111,21 +3267,171 @@ function updateMailFromOptions() {
 async function sendMailSMTP() {
     const from = document.getElementById('mailFrom').value;
     const to = getMailToValue();
+    const cc = getMailCcValue();
     const subject = document.getElementById('mailSubject').value.trim();
     const body = document.getElementById('mailBody').value.trim();
     if (!to || !subject) { showToast('Remplis le(s) destinataire(s) et le sujet.', 'error'); return; }
+
+    // Save to task if associated
+    if (selectedMailTask) saveMailFieldsToTask();
+
+    // Prepare attachments as base64
+    const attachments = await prepareAttachmentsForSend();
+
     showLoading('Envoi du mail via SMTP…');
     try {
         const r = await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from, to, subject, body })
+            body: JSON.stringify({ from, to, subject, body, cc, attachments: attachments.length ? attachments : undefined })
         });
         const result = await r.json();
         if (result.ok) {
-            showToast('Mail envoyé !', 'success', 3000);
+            showToast('Mail envoyé et sauvegardé !', 'success', 3000);
+            clearAttachments();
+            // Mark associated task as sent
+            if (selectedMailTask) {
+                markMailTaskSent(selectedMailTask.sid, selectedMailTask.tid);
+                autoSave();
+                renderMailTab();
+                render();
+            }
         } else {
             showToast('Erreur : ' + (result.error || 'Erreur'), 'error', 5000);
+        }
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 5000);
+    } finally {
+        hideLoading();
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Attachments management
+   ═══════════════════════════════════════════════════════ */
+let pendingAttachments = []; // { file: File, name: string }
+
+function handleAttachmentFiles(files) {
+    for (const file of files) {
+        if (!pendingAttachments.find(a => a.name === file.name && a.file.size === file.size)) {
+            pendingAttachments.push({ file, name: file.name });
+        }
+    }
+    renderAttachmentList();
+    // Reset input so same file can be re-added
+    document.getElementById('attachmentInput').value = '';
+}
+
+function removeAttachment(idx) {
+    pendingAttachments.splice(idx, 1);
+    renderAttachmentList();
+}
+
+function clearAttachments() {
+    pendingAttachments = [];
+    renderAttachmentList();
+}
+
+function renderAttachmentList() {
+    const list = document.getElementById('attachmentList');
+    const placeholder = document.getElementById('attachmentPlaceholder');
+    if (!pendingAttachments.length) {
+        list.innerHTML = '';
+        placeholder.style.display = '';
+        return;
+    }
+    placeholder.style.display = 'none';
+    list.innerHTML = pendingAttachments.map((a, i) => {
+        const sizeKB = (a.file.size / 1024).toFixed(1);
+        return `<span style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--bg-surface);border:1px solid var(--card-border);border-radius:var(--radius-sm);padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text)">
+            📎 ${esc(a.name)} <span style="color:var(--text-muted)">(${sizeKB} Ko)</span>
+            <button onclick="event.stopPropagation();removeAttachment(${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.85rem;padding:0 0.15rem">&times;</button>
+        </span>`;
+    }).join('');
+}
+
+async function prepareAttachmentsForSend() {
+    const results = [];
+    for (const att of pendingAttachments) {
+        const data = await fileToBase64(att.file);
+        results.push({
+            filename: att.name,
+            content_type: att.file.type || 'application/octet-stream',
+            data: data
+        });
+    }
+    return results;
+}
+
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const b64 = reader.result.split(',')[1];
+            resolve(b64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+// Drag & drop support for attachment zone
+(function initAttachmentDragDrop() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const zone = document.getElementById('attachmentZone');
+        if (!zone) return;
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent-blue)'; });
+        zone.addEventListener('dragleave', () => { zone.style.borderColor = 'var(--card-border)'; });
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.style.borderColor = 'var(--card-border)';
+            if (e.dataTransfer.files.length) handleAttachmentFiles(e.dataTransfer.files);
+        });
+    });
+})();
+
+/* ═══════════════════════════════════════════════════════
+   Email Autoconfig (Mozilla Thunderbird DB)
+   ═══════════════════════════════════════════════════════ */
+async function autoconfigAccount(idx) {
+    const emailInput = document.getElementById('accEmail_' + idx);
+    const email = emailInput ? emailInput.value.trim() : accountsData[idx].email;
+    if (!email || !email.includes('@')) {
+        showToast('Saisis d\'abord une adresse email valide.', 'error');
+        return;
+    }
+    accountsData[idx].email = email;
+    showLoading('Recherche de la configuration pour ' + email.split('@')[1] + '…');
+    try {
+        const r = await fetch('/api/autoconfig', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        const result = await r.json();
+        if (result.ok && result.config) {
+            const cfg = result.config;
+            if (cfg.imap) {
+                accountsData[idx].protocol = 'imap';
+                accountsData[idx].imap_server = cfg.imap.server;
+                accountsData[idx].imap_port = cfg.imap.port;
+                accountsData[idx].imap_ssl = cfg.imap.ssl;
+                accountsData[idx].username = cfg.imap.username || email;
+            }
+            if (cfg.smtp) {
+                accountsData[idx].smtp_server = cfg.smtp.server;
+                accountsData[idx].smtp_port = cfg.smtp.port;
+                accountsData[idx].smtp_ssl = cfg.smtp.ssl || false;
+                accountsData[idx].smtp_starttls = cfg.smtp.starttls || false;
+                if (!accountsData[idx].username) {
+                    accountsData[idx].username = cfg.smtp.username || email;
+                }
+            }
+            renderAccountsList();
+            const source = cfg.source === 'mozilla' ? 'base Mozilla Thunderbird' : 'détection automatique';
+            showToast(`Configuration trouvée (${source}) !`, 'success', 3000);
+        } else {
+            showToast(result.error || 'Aucune configuration trouvée.', 'error', 4000);
         }
     } catch (e) {
         showToast('Erreur : ' + e.message, 'error', 5000);

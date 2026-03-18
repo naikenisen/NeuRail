@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Serveur local pour l'app Todo & Mail — sauvegarde dans data.json."""
 
+import base64
 import csv
 import email as email_lib
 import email.policy
 import hashlib
 import http.server
+import imaplib
 import json
 import logging
 import mailbox
@@ -14,10 +16,15 @@ import poplib
 import re
 import shutil
 import smtplib
+import socket
+import ssl
 import subprocess
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import getaddresses, parsedate_to_datetime
@@ -414,8 +421,115 @@ def fetch_pop3(account):
     return new_count, errors
 
 
+# ═══════════════════════════════════════════════════════
+#  IMAP Fetch
+# ═══════════════════════════════════════════════════════
+def fetch_imap(account):
+    """Fetch emails via IMAP for one account. Returns (new_count, errors)."""
+    server = account.get("imap_server", "")
+    port = int(account.get("imap_port", 993))
+    use_ssl = account.get("imap_ssl", True)
+    username = account.get("username", "")
+    password = account.get("password", "")
+    account_email = account.get("email", username)
+    post_action = account.get("imap_post_action", "mark_read")  # mark_read | delete
+
+    seen = load_seen_uids()
+    account_key = f"{username}@{server}"
+    if account_key not in seen:
+        seen[account_key] = []
+
+    inbox = load_inbox_index()
+    new_count = 0
+    errors = []
+
+    try:
+        if use_ssl:
+            imap = imaplib.IMAP4_SSL(server, port)
+        else:
+            imap = imaplib.IMAP4(server, port)
+
+        imap.login(username, password)
+        imap.select("INBOX")
+
+        # Search for all messages
+        status, data = imap.search(None, "ALL")
+        if status != "OK":
+            errors.append("IMAP search failed")
+            imap.logout()
+            return 0, errors
+
+        msg_nums = data[0].split()
+        for num in msg_nums:
+            # Get UID for dedup
+            status, uid_data = imap.fetch(num, "(UID)")
+            if status != "OK":
+                continue
+            uid_str = uid_data[0].decode("utf-8", errors="replace") if isinstance(uid_data[0], bytes) else str(uid_data[0])
+            # Extract UID from response like '1 (UID 123)'
+            uid_match = re.search(r"UID\s+(\d+)", uid_str)
+            if not uid_match:
+                continue
+            uid = uid_match.group(1)
+
+            if uid in seen[account_key]:
+                continue
+
+            # Fetch full message
+            status, msg_data = imap.fetch(num, "(RFC822)")
+            if status != "OK" or not msg_data or not msg_data[0]:
+                continue
+
+            try:
+                raw_bytes = msg_data[0][1]
+                mail_id = compute_mail_id(raw_bytes)
+
+                # Save raw .eml
+                safe_id = mail_id[:16]
+                eml_filename = f"{safe_id}.eml"
+                eml_path = os.path.join(MAILS_DIR, eml_filename)
+                with open(eml_path, "wb") as f:
+                    f.write(raw_bytes)
+
+                # Parse metadata
+                meta = parse_email_metadata(raw_bytes, account_email)
+                meta["id"] = mail_id
+                meta["uid"] = uid
+                meta["eml_file"] = eml_filename
+                meta["read"] = False
+                meta["starred"] = False
+                meta["deleted"] = False
+                meta["protocol"] = "imap"
+
+                inbox.append(meta)
+                seen[account_key].append(uid)
+                new_count += 1
+
+                # Post-fetch action
+                if post_action == "delete":
+                    imap.store(num, "+FLAGS", "\\Deleted")
+                elif post_action == "mark_read":
+                    imap.store(num, "+FLAGS", "\\Seen")
+
+            except Exception as e:
+                errors.append(f"IMAP message {num}: {e}")
+
+        if post_action == "delete":
+            imap.expunge()
+
+        imap.close()
+        imap.logout()
+
+    except Exception as e:
+        errors.append(str(e))
+
+    save_seen_uids(seen)
+    save_inbox_index(inbox)
+    return new_count, errors
+
+
 def fetch_all_accounts():
-    """Fetch from all configured POP3 accounts."""
+    """Fetch from all configured accounts (POP3 or IMAP)."""
     accounts = load_accounts()
     total_new = 0
     all_errors = []
@@ -424,7 +538,11 @@ def fetch_all_accounts():
         if not acc.get("enabled", True):
             continue
         try:
-            n, errs = fetch_pop3(acc)
+            protocol = acc.get("protocol", "pop3").lower()
+            if protocol == "imap":
+                n, errs = fetch_imap(acc)
+            else:
+                n, errs = fetch_pop3(acc)
             total_new += n
             all_errors.extend(errs)
         except Exception as e:
@@ -434,10 +552,137 @@ def fetch_all_accounts():
 
 
 # ═══════════════════════════════════════════════════════
+#  Email Autoconfig (Mozilla Thunderbird database)
+# ═══════════════════════════════════════════════════════
+def autoconfig_email(email_addr):
+    """Auto-detect IMAP/SMTP settings from Mozilla's autoconfig database."""
+    domain = email_addr.strip().split("@")[-1].lower()
+
+    config = None
+    # Try Mozilla autoconfig
+    url = f"https://autoconfig.thunderbird.net/v1.1/{domain}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "NexoMail/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            xml_data = resp.read()
+        config = _parse_autoconfig_xml(xml_data, email_addr)
+    except Exception:
+        config = None
+
+    if config:
+        return config
+
+    # Fallback: probe common hostnames
+    return _autoconfig_fallback(domain, email_addr)
+
+
+def _parse_autoconfig_xml(xml_data, email_addr):
+    """Parse Mozilla autoconfig XML and return structured config dict."""
+    root = ET.fromstring(xml_data)
+    ns = ''
+    # Handle potential namespace
+    if root.tag.startswith('{'):
+        ns = root.tag.split('}')[0] + '}'
+
+    result = {"imap": None, "smtp": None, "source": "mozilla"}
+
+    for provider in root.iter(f"{ns}emailProvider"):
+        # Find IMAP
+        for inc in provider.iter(f"{ns}incomingServer"):
+            if inc.get("type") == "imap":
+                hostname = (inc.findtext(f"{ns}hostname") or "").strip()
+                port = int(inc.findtext(f"{ns}port") or "993")
+                socket_type = (inc.findtext(f"{ns}socketType") or "SSL").strip()
+                username_tpl = (inc.findtext(f"{ns}username") or "%EMAILADDRESS%").strip()
+                username = username_tpl.replace("%EMAILADDRESS%", email_addr).replace("%EMAILLOCALPART%", email_addr.split("@")[0])
+                result["imap"] = {
+                    "server": hostname, "port": port,
+                    "ssl": socket_type in ("SSL", "STARTTLS"),
+                    "socket_type": socket_type, "username": username
+                }
+                break
+
+        # Find SMTP
+        for out in provider.iter(f"{ns}outgoingServer"):
+            if out.get("type") == "smtp":
+                hostname = (out.findtext(f"{ns}hostname") or "").strip()
+                port = int(out.findtext(f"{ns}port") or "587")
+                socket_type = (out.findtext(f"{ns}socketType") or "STARTTLS").strip()
+                username_tpl = (out.findtext(f"{ns}username") or "%EMAILADDRESS%").strip()
+                username = username_tpl.replace("%EMAILADDRESS%", email_addr).replace("%EMAILLOCALPART%", email_addr.split("@")[0])
+                result["smtp"] = {
+                    "server": hostname, "port": port,
+                    "ssl": socket_type == "SSL",
+                    "starttls": socket_type == "STARTTLS",
+                    "socket_type": socket_type, "username": username
+                }
+                break
+
+    if result["imap"] or result["smtp"]:
+        return result
+    return None
+
+
+def _autoconfig_fallback(domain, email_addr):
+    """Fallback: test common IMAP/SMTP hostnames and ports."""
+    result = {"imap": None, "smtp": None, "source": "fallback"}
+
+    # Try IMAP
+    for host in [f"imap.{domain}", f"mail.{domain}"]:
+        for port, use_ssl in [(993, True), (143, False)]:
+            try:
+                if use_ssl:
+                    conn = imaplib.IMAP4_SSL(host, port, timeout=5)
+                else:
+                    conn = imaplib.IMAP4(host, port)
+                    conn.socket().settimeout(5)
+                conn.logout()
+                result["imap"] = {
+                    "server": host, "port": port, "ssl": use_ssl,
+                    "socket_type": "SSL" if use_ssl else "plain",
+                    "username": email_addr
+                }
+                break
+            except Exception:
+                continue
+        if result["imap"]:
+            break
+
+    # Try SMTP
+    for host in [f"smtp.{domain}", f"mail.{domain}"]:
+        for port, use_ssl, use_starttls in [(465, True, False), (587, False, True), (25, False, False)]:
+            try:
+                if use_ssl:
+                    srv = smtplib.SMTP_SSL(host, port, timeout=5)
+                else:
+                    srv = smtplib.SMTP(host, port, timeout=5)
+                    if use_starttls:
+                        srv.starttls()
+                srv.quit()
+                result["smtp"] = {
+                    "server": host, "port": port, "ssl": use_ssl,
+                    "starttls": use_starttls,
+                    "socket_type": "SSL" if use_ssl else ("STARTTLS" if use_starttls else "plain"),
+                    "username": email_addr
+                }
+                break
+            except Exception:
+                continue
+        if result["smtp"]:
+            break
+
+    if result["imap"] or result["smtp"]:
+        return result
+    return None
+
+
+# ═══════════════════════════════════════════════════════
 #  SMTP Send
 # ═══════════════════════════════════════════════════════
-def send_email_smtp(account, to_addr, subject, body_text, cc=""):
-    """Send email via SMTP using account config."""
+def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=None):
+    """Send email via SMTP using account config. Also saves .eml locally.
+    attachments: list of dicts with keys: filename, content_type, data (base64-encoded)
+    """
     smtp_server = account.get("smtp_server", "")
     smtp_port = int(account.get("smtp_port", 587))
     smtp_ssl = account.get("smtp_ssl", False)
@@ -451,9 +696,26 @@ def send_email_smtp(account, to_addr, subject, body_text, cc=""):
     msg["To"] = to_addr
     msg["Subject"] = subject
     msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0100")
+    msg["Message-ID"] = f"<{hashlib.md5((from_addr + to_addr + subject + str(time.time())).encode()).hexdigest()}@nexomail>"
     if cc:
         msg["Cc"] = cc
     msg.attach(MIMEText(body_text, "plain", "utf-8"))
+
+    # Attach files
+    if attachments:
+        for att in attachments:
+            filename = att.get("filename", "attachment")
+            content_type = att.get("content_type", "application/octet-stream")
+            file_data = base64.b64decode(att.get("data", ""))
+            maintype, subtype = content_type.split("/", 1) if "/" in content_type else ("application", "octet-stream")
+            part = MIMEBase(maintype, subtype)
+            part.set_payload(file_data)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=filename)
+            msg.attach(part)
+
+    raw_msg = msg.as_string()
+    raw_bytes = raw_msg.encode("utf-8")
 
     if smtp_ssl:
         server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30)
@@ -467,8 +729,29 @@ def send_email_smtp(account, to_addr, subject, body_text, cc=""):
     all_recipients = [a.strip() for a in to_addr.split(",")]
     if cc:
         all_recipients += [a.strip() for a in cc.split(",")]
-    server.sendmail(from_addr, all_recipients, msg.as_string())
+    server.sendmail(from_addr, all_recipients, raw_msg)
     server.quit()
+
+    # Save sent email locally as .eml in MAILS_DIR
+    mail_id = compute_mail_id(raw_bytes)
+    safe_id = mail_id[:16]
+    eml_filename = f"sent_{safe_id}.eml"
+    eml_path = os.path.join(MAILS_DIR, eml_filename)
+    with open(eml_path, "wb") as f:
+        f.write(raw_bytes)
+
+    # Add to inbox index as sent mail
+    meta = parse_email_metadata(raw_bytes, from_addr)
+    meta["id"] = mail_id
+    meta["uid"] = ""
+    meta["eml_file"] = eml_filename
+    meta["read"] = True
+    meta["starred"] = False
+    meta["deleted"] = False
+    meta["folder"] = "sent"
+    inbox = load_inbox_index()
+    inbox.append(meta)
+    save_inbox_index(inbox)
 
     return True
 
@@ -486,7 +769,35 @@ def find_account_by_email(email_addr):
 #  Delete mail from POP3 server
 # ═══════════════════════════════════════════════════════
 def delete_mail_on_server(account, uid_to_delete):
-    """Connect via POP3 and delete a message by UID."""
+    """Connect via POP3 or IMAP and delete a message by UID."""
+    protocol = account.get("protocol", "pop3").lower()
+
+    if protocol == "imap":
+        server = account.get("imap_server", "")
+        port = int(account.get("imap_port", 993))
+        use_ssl = account.get("imap_ssl", True)
+        username = account.get("username", "")
+        password = account.get("password", "")
+
+        if use_ssl:
+            imap = imaplib.IMAP4_SSL(server, port)
+        else:
+            imap = imaplib.IMAP4(server, port)
+
+        imap.login(username, password)
+        imap.select("INBOX")
+
+        status, data = imap.search(None, f"UID {uid_to_delete}")
+        if status == "OK" and data[0]:
+            for num in data[0].split():
+                imap.store(num, "+FLAGS", "\\Deleted")
+            imap.expunge()
+
+        imap.close()
+        imap.logout()
+        return True
+
+    # POP3 fallback
     server = account.get("pop3_server", "")
     port = int(account.get("pop3_port", 995))
     use_ssl = account.get("pop3_ssl", True)
@@ -815,10 +1126,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(load_accounts())
         if self.path == "/api/inbox":
             inbox = load_inbox_index()
-            # Filter out deleted, sort by date desc
-            visible = [m for m in inbox if not m.get("deleted")]
+            # Filter out deleted and sent, sort by date desc
+            visible = [m for m in inbox if not m.get("deleted") and m.get("folder") != "sent"]
             visible.sort(key=lambda m: m.get("date_ts", 0), reverse=True)
             return self._json(visible)
+        if self.path == "/api/inbox/sent":
+            inbox = load_inbox_index()
+            sent = [m for m in inbox if m.get("folder") == "sent" and not m.get("deleted")]
+            sent.sort(key=lambda m: m.get("date_ts", 0), reverse=True)
+            return self._json(sent)
         if self.path.startswith("/api/mail/"):
             mail_id = self.path.split("/api/mail/")[1]
             inbox = load_inbox_index()
@@ -885,19 +1201,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 
-        if self.path == "/api/open-thunderbird":
-            try:
-                filepath = save_eml_to_downloads(
-                    data.get("from", ""),
-                    data.get("to", ""),
-                    data.get("subject", ""),
-                    data.get("body", "")
-                )
-                subprocess.Popen(["thunderbird", "-compose",
-                    f"from='{data.get('from', '')}',to='{data.get('to', '')}',subject='{data.get('subject', '')}',body='{data.get('body', '')}'"])
-                return self._json({"ok": True, "path": filepath})
-            except Exception as e:
-                return self._json({"error": str(e)}, 500)
+
 
         if self.path == "/api/generate-reminder":
             try:
@@ -915,7 +1219,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 
-        # ── Fetch emails (POP3) ──
+        # ── Email autoconfig (Mozilla Thunderbird DB) ──
+        if self.path == "/api/autoconfig":
+            try:
+                email_addr = data.get("email", "").strip()
+                if not email_addr or "@" not in email_addr:
+                    return self._json({"error": "Adresse email invalide"}, 400)
+                result = autoconfig_email(email_addr)
+                if result:
+                    return self._json({"ok": True, "config": result})
+                else:
+                    domain = email_addr.split("@")[-1]
+                    return self._json({"error": f"Aucune configuration trouvée pour {domain}"}, 404)
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        # ── Fetch emails (POP3/IMAP) ──
         if self.path == "/api/fetch-emails":
             try:
                 new_count, errors = fetch_all_accounts()
@@ -935,10 +1254,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 subject = data.get("subject", "")
                 body = data.get("body", "")
                 cc = data.get("cc", "")
+                attachments = data.get("attachments", None)
                 account = find_account_by_email(from_addr)
                 if not account:
                     return self._json({"error": f"Aucun compte configuré pour {from_addr}"}, 400)
-                send_email_smtp(account, to_addr, subject, body, cc)
+                send_email_smtp(account, to_addr, subject, body, cc, attachments=attachments)
                 return self._json({"ok": True})
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
