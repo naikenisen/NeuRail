@@ -5,28 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Todo & Mail</title>
     <style>
-        /* ─── Variables & Reset ──────────────────────── */
+        /* ─── Deep Medical Theme — Variables & Reset ──── */
         :root {
-            --bg: #0f1117;
-            --card: #1a1d2e;
-            --card-border: #2a2d3e;
-            --text: #e2e4eb;
-            --text-muted: #8b8fa3;
-            --accent-blue: #6c8aff;
-            --accent-green: #34d399;
-            --accent-orange: #f59e0b;
-            --accent-purple: #a78bfa;
-            --accent-pink: #f472b6;
-            --accent-slate: #94a3b8;
-            --progress-bg: #252840;
-            --checked: #34d399;
+            --bg: #0d0f14;
+            --bg-surface: #12151c;
+            --card: #171b26;
+            --card-border: #1f2533;
+            --card-hover: #1c2130;
+            --text: #e4e7ef;
+            --text-muted: #6b7394;
+            --accent-blue: #4a90f4;
+            --accent-blue-glow: rgba(74, 144, 244, 0.15);
+            --accent-green: #2dd4a8;
+            --accent-orange: #f0a030;
+            --accent-purple: #9b7df0;
+            --accent-pink: #e86ca0;
+            --accent-slate: #7e8ba8;
+            --progress-bg: #1a1f2e;
+            --checked: #2dd4a8;
+            --titlebar-bg: #0a0c10;
+            --titlebar-border: #1a1e2a;
+            --titlebar-btn-hover: rgba(255,255,255,0.06);
+            --titlebar-close-hover: #e04040;
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.45);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
             background: var(--bg);
             color: var(--text);
             line-height: 1.6;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* ─── Scrollbar Hiding & Custom ────────────────── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* Re-enable selection on editable content */
+        input, textarea, [contenteditable], .task-label, .terminal-output, .mail-field textarea, .mail-field input {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        /* ─── Custom Titlebar ─────────────────────────── */
+        .titlebar {
+            display: flex;
+            align-items: center;
+            height: 38px;
+            background: var(--titlebar-bg);
+            border-bottom: 1px solid var(--titlebar-border);
+            -webkit-app-region: drag;
+            app-region: drag;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 50000;
+            padding: 0 8px;
+            gap: 10px;
+        }
+        .titlebar-icon {
+            width: 18px; height: 18px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px;
+            -webkit-app-region: no-drag;
+        }
+        .titlebar-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            flex: 1;
+        }
+        .titlebar-controls {
+            display: flex;
+            -webkit-app-region: no-drag;
+            app-region: no-drag;
+        }
+        .titlebar-btn {
+            width: 46px; height: 38px;
+            display: flex; align-items: center; justify-content: center;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .titlebar-btn:hover {
+            background: var(--titlebar-btn-hover);
+            color: var(--text);
+        }
+        .titlebar-btn.close:hover {
+            background: var(--titlebar-close-hover);
+            color: #fff;
+        }
+        .titlebar-btn svg {
+            width: 16px; height: 16px;
+            stroke: currentColor; stroke-width: 1.5;
+            fill: none;
+        }
+
+        /* ─── App Content Area (below titlebar) ────────── */
+        .app-content {
+            margin-top: 38px;
+            height: calc(100vh - 38px);
+            overflow-y: auto;
+            overflow-x: hidden;
             padding: 2rem 1rem;
         }
 
@@ -73,7 +165,7 @@
         /* ─── Global Progress ────────────────────────── */
         .global-progress {
             background: var(--card); border: 1px solid var(--card-border); border-radius: 16px;
-            padding: 1.5rem 2rem; margin-bottom: 2.5rem; position: sticky; top: 1rem; z-index: 100;
+            padding: 1.5rem 2rem; margin-bottom: 2.5rem; position: sticky; top: 0; z-index: 100;
             backdrop-filter: blur(12px);
         }
         .global-progress-header {
@@ -98,7 +190,7 @@
             background: var(--card); border: 1px solid var(--card-border); border-radius: 16px;
             margin-bottom: 1.5rem; overflow: hidden; transition: box-shadow 0.3s, outline 0.2s;
         }
-        .section:hover { box-shadow: 0 0 30px rgba(108,138,255,0.06); }
+        .section:hover { box-shadow: 0 0 30px var(--accent-blue-glow); }
         .section-header {
             padding: 1.25rem 1.5rem; display: flex; justify-content: space-between;
             align-items: center; cursor: pointer; user-select: none;
@@ -391,6 +483,24 @@
 </head>
 <body>
 
+<!-- ─── Custom Titlebar ────────────────────────── -->
+<div class="titlebar" id="titlebar">
+    <span class="titlebar-icon">🩺</span>
+    <span class="titlebar-title">Todo & Mail</span>
+    <div class="titlebar-controls">
+        <button class="titlebar-btn" id="btn-minimize" title="Réduire">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="titlebar-btn" id="btn-maximize" title="Agrandir">
+            <svg viewBox="0 0 24 24" id="maximize-icon"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+        </button>
+        <button class="titlebar-btn close" id="btn-close" title="Fermer">
+            <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+</div>
+
+<div class="app-content" id="app-content">
 <canvas id="confetti"></canvas>
 
 <div class="container">
@@ -455,6 +565,9 @@
         </div>
     </div>
 </div>
+
+</div><!-- end .container -->
+</div><!-- end .app-content -->
 
 <!-- Section Modal -->
 <div class="modal-overlay" id="sectionModal" onclick="if(event.target===this)closeSectionModal()">
@@ -1425,6 +1538,81 @@ setInterval(() => {
         if (tabBtn) tabBtn.textContent = '📧 Mail ● ' + due.length;
     }
 })();
+
+/* ═══════════════════════════════════════════════════════
+   Custom Titlebar Controls
+   ═══════════════════════════════════════════════════════ */
+(function initTitlebar() {
+    const api = window.electronAPI;
+    if (!api) return; // not running in Electron
+
+    document.getElementById('btn-minimize').addEventListener('click', () => api.minimize());
+    document.getElementById('btn-maximize').addEventListener('click', () => api.maximize());
+    document.getElementById('btn-close').addEventListener('click', () => api.close());
+})();
+
+/* ═══════════════════════════════════════════════════════
+   Custom Context Menu (right-click)
+   ═══════════════════════════════════════════════════════ */
+document.addEventListener('contextmenu', (e) => {
+    const api = window.electronAPI;
+    if (!api) return; // browser fallback = default context menu
+    e.preventDefault();
+
+    const taskItem = e.target.closest('.task-item');
+    const params = {
+        hasSelection: !!window.getSelection().toString(),
+        isEditable: e.target.matches('input, textarea, [contenteditable]'),
+        isTask: !!taskItem,
+        taskId: taskItem ? taskItem.dataset.tid : null,
+        sectionId: taskItem ? taskItem.dataset.sid : null,
+        isTaskDone: taskItem ? taskItem.classList.contains('checked') : false,
+    };
+
+    api.showContextMenu(params);
+});
+
+// Listen for context menu actions from main process
+if (window.electronAPI) {
+    window.electronAPI.onContextMenuAction('context-menu:toggle-task', (tid, sid) => {
+        if (typeof toggleTask === 'function') toggleTask(sid, tid);
+    });
+    window.electronAPI.onContextMenuAction('context-menu:delete-task', (tid, sid) => {
+        if (typeof deleteTask === 'function') deleteTask(sid, tid);
+    });
+}
+
+/* ═══════════════════════════════════════════════════════
+   Keyboard Shortcuts
+   ═══════════════════════════════════════════════════════ */
+document.addEventListener('keydown', (e) => {
+    // Ctrl+E — toggle edit mode
+    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault();
+        toggleEdit();
+    }
+    // Ctrl+1 — switch to Todo tab
+    if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+        e.preventDefault();
+        switchTab('todo');
+    }
+    // Ctrl+2 — switch to Mail tab
+    if ((e.ctrlKey || e.metaKey) && e.key === '2') {
+        e.preventDefault();
+        switchTab('mail');
+    }
+    // Ctrl+N — new section (when in edit mode)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n' && editMode) {
+        e.preventDefault();
+        openSectionModal();
+    }
+    // Escape — close modals
+    if (e.key === 'Escape') {
+        closeSectionModal();
+        closeSettings();
+        if (typeof closeReminderModal === 'function') closeReminderModal();
+    }
+});
 </script>
 </body>
 </html>
