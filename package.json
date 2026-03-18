@@ -1,7 +1,7 @@
 {
-  "name": "nexomail",
+  "name": "isenapp",
   "version": "1.0.0",
-  "description": "NexoMail — Electron email client with todo tracking",
+  "description": "ISENAPP — Client email Electron avec gestion de tâches, autoconfig email et visualisation Obsidian",
   "author": {
     "name": "Isen Naiken",
     "email": "isen.naiken@nexomedis.com"
@@ -10,11 +10,14 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --linux",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder --linux --mac --win",
     "build:dir": "electron-builder --linux --dir"
   },
   "build": {
-    "appId": "com.nexomedis.nexomail",
-    "productName": "NexoMail",
+    "appId": "com.nexomedis.isenapp",
+    "productName": "ISENAPP",
     "directories": {
       "output": "dist"
     },
@@ -49,6 +52,25 @@
       ],
       "category": "Office",
       "icon": "icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "icon.png",
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   },
   "devDependencies": {

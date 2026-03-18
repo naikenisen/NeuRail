@@ -562,7 +562,7 @@ def autoconfig_email(email_addr):
     # Try Mozilla autoconfig
     url = f"https://autoconfig.thunderbird.net/v1.1/{domain}"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "NexoMail/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "ISENAPP/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             xml_data = resp.read()
         config = _parse_autoconfig_xml(xml_data, email_addr)
@@ -696,7 +696,7 @@ def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=Non
     msg["To"] = to_addr
     msg["Subject"] = subject
     msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0100")
-    msg["Message-ID"] = f"<{hashlib.md5((from_addr + to_addr + subject + str(time.time())).encode()).hexdigest()}@nexomail>"
+    msg["Message-ID"] = f"<{hashlib.md5((from_addr + to_addr + subject + str(time.time())).encode()).hexdigest()}@isenapp>"
     if cc:
         msg["Cc"] = cc
     msg.attach(MIMEText(body_text, "plain", "utf-8"))

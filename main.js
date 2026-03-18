@@ -102,7 +102,7 @@ function createWindow() {
     height: winState.height,
     minWidth: 800,
     minHeight: 550,
-    title: 'NexoMail',
+    title: 'ISENAPP',
     icon: path.join(__dirname, 'icon.png'),
     frame: false,
     transparent: false,
