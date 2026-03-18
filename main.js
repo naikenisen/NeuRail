@@ -1,9 +1,18 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut, shell, protocol } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
 const fs = require('fs');
 const windowStateKeeper = require('electron-window-state');
+
+/* GPU tile-memory fix — prevents "tile memory limits exceeded" on large SVG graphs */
+app.commandLine.appendSwitch('max-active-webgl-contexts', '16');
+app.commandLine.appendSwitch('force-gpu-mem-available-mb', '512');
+
+/* Register custom protocol for serving vault files securely */
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'vault-file', privileges: { bypassCSP: true, stream: true, supportFetchAPI: true } }
+]);
 
 const PORT = 8080;
 let serverProcess = null;
@@ -289,6 +298,30 @@ ipcMain.handle('vault:readFile', async (_event, relpath) => {
   }
 });
 
+ipcMain.handle('vault:getFileUrl', async (_event, relpath) => {
+  const safe = path.normalize(relpath).replace(/^(\.\.[/\\])+/, '');
+  const fullPath = path.join(VAULT_PATH, safe);
+  if (!fullPath.startsWith(VAULT_PATH)) return { ok: false, error: 'Path outside vault' };
+  try {
+    fs.accessSync(fullPath, fs.constants.R_OK);
+    return { ok: true, url: 'vault-file://load/' + encodeURIComponent(safe) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('vault:openExternal', async (_event, relpath) => {
+  const safe = path.normalize(relpath).replace(/^(\.\.[/\\])+/, '');
+  const fullPath = path.join(VAULT_PATH, safe);
+  if (!fullPath.startsWith(VAULT_PATH)) return { ok: false, error: 'Path outside vault' };
+  try {
+    await shell.openPath(fullPath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 /* ═══════════════════════════════════════════════════════
    IPC Handlers — Context Menu
    ═══════════════════════════════════════════════════════ */
@@ -343,6 +376,30 @@ ipcMain.on('context-menu:show', (_event, params) => {
    App Lifecycle
    ═══════════════════════════════════════════════════════ */
 app.whenReady().then(async () => {
+  // Register vault-file:// protocol to serve vault files securely
+  protocol.handle('vault-file', (request) => {
+    const url = new URL(request.url);
+    const relpath = decodeURIComponent(url.pathname.replace(/^\//, ''));
+    const safe = path.normalize(relpath).replace(/^(\.\.[/\\])+/, '');
+    const fullPath = path.join(VAULT_PATH, safe);
+    if (!fullPath.startsWith(VAULT_PATH)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    const ext = path.extname(fullPath).toLowerCase();
+    const mimeMap = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+      '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.pdf': 'application/pdf',
+    };
+    const mime = mimeMap[ext] || 'application/octet-stream';
+    try {
+      const data = fs.readFileSync(fullPath);
+      return new Response(data, { headers: { 'Content-Type': mime } });
+    } catch {
+      return new Response('Not found', { status: 404 });
+    }
+  });
+
   startPythonServer();
   try {
     await waitForServer(PORT);

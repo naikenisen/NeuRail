@@ -829,8 +829,17 @@
         .node-item .node-type-dot {
             display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.4rem; vertical-align: middle;
         }
-        .graph-canvas-wrap { flex: 1; position: relative; background: var(--bg); border-radius: 0 var(--radius-md) var(--radius-md) 0; overflow: hidden; }
-        #graphSvg { width: 100%; height: 100%; display: block; }
+        .graph-canvas-wrap { flex: 1; position: relative; background: var(--bg); border-radius: 0 var(--radius-md) var(--radius-md) 0; overflow: hidden; contain: strict; }
+        #graphSvg { width: 100%; height: 100%; display: block; overflow: hidden; }
+        #graphSvg.simulating line { shape-rendering: optimizeSpeed; }
+        .graph-placeholder {
+            position: absolute; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 0.6rem;
+            color: var(--text-muted); pointer-events: none;
+        }
+        .graph-placeholder .gp-icon { font-size: 2.2rem; opacity: 0.3; }
+        .graph-placeholder .gp-text { font-size: 0.85rem; opacity: 0.6; }
+        .graph-placeholder .gp-hint { font-size: 0.72rem; opacity: 0.35; }
         .graph-zoom-controls {
             position: absolute; bottom: 0.75rem; right: 0.75rem;
             display: flex; gap: 0.3rem; z-index: 10;
@@ -842,12 +851,19 @@
         }
         .graph-zoom-controls button:hover { background: var(--card-hover); }
         .graph-reader {
-            position: absolute; top: 0; right: 0; width: 380px; height: 100%;
+            position: absolute; top: 0; right: 0; width: 380px; min-width: 260px; max-width: 85%; height: 100%;
             background: var(--bg-surface); border-left: 1px solid var(--card-border);
             transform: translateX(100%); transition: transform 0.2s ease; z-index: 20;
             display: flex; flex-direction: column;
         }
         .graph-reader.open { transform: translateX(0); }
+        .graph-reader-resize {
+            position: absolute; top: 0; left: -4px; width: 8px; height: 100%;
+            cursor: col-resize; z-index: 25;
+        }
+        .graph-reader-resize:hover, .graph-reader-resize:active {
+            background: var(--accent-blue); opacity: 0.3;
+        }
         .graph-reader-header {
             display: flex; justify-content: space-between; align-items: center;
             padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--card-border);
@@ -860,11 +876,28 @@
             background: none; border: none; color: var(--text-muted); cursor: pointer;
             font-size: 1.1rem; padding: 0.2rem 0.4rem;
         }
+        .graph-reader-header button:hover { color: var(--text); }
         .graph-reader-body {
             flex: 1; overflow-y: auto; padding: 0.8rem;
             font-size: 0.8rem; line-height: 1.7; color: var(--text-muted);
             white-space: pre-wrap; font-family: 'JetBrains Mono', monospace;
+            display: flex; flex-direction: column;
         }
+        .graph-reader-body img {
+            max-width: 100%; height: auto; border-radius: var(--radius-sm);
+            background: var(--bg); object-fit: contain;
+        }
+        .graph-reader-body iframe {
+            width: 100%; flex: 1; min-height: 400px; border: none;
+            border-radius: var(--radius-sm); background: #fff;
+        }
+        .graph-reader-body .open-external-btn {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.5rem 1rem; margin: 1rem auto; border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--accent-blue);
+            cursor: pointer; font-size: 0.8rem; font-family: inherit; transition: background 0.15s;
+        }
+        .graph-reader-body .open-external-btn:hover { background: var(--card-hover); }
         .graph-stats {
             display: flex; gap: 1rem; padding: 0.25rem 0.6rem 0.4rem; font-size: 0.7rem; color: var(--text-muted);
         }
@@ -1032,15 +1065,22 @@
         </div>
         <div class="graph-canvas-wrap">
             <svg id="graphSvg"></svg>
-            <div class="graph-zoom-controls">
+            <div class="graph-placeholder" id="graphPlaceholder">
+                <div class="gp-icon"><i class="icon-network"></i></div>
+                <div class="gp-text">Tapez une recherche pour afficher le graphe</div>
+                <div class="gp-hint">minimum 2 caractères</div>
+            </div>
+            <div class="graph-zoom-controls" id="graphZoomControls" style="display:none">
                 <button onclick="graphZoom(1.3)" title="Zoom in">+</button>
                 <button onclick="graphZoom(1/1.3)" title="Zoom out">−</button>
                 <button onclick="graphFit()" title="Fit">⊡</button>
             </div>
         </div>
         <div class="graph-reader" id="graphReader">
+            <div class="graph-reader-resize" id="graphReaderResize"></div>
             <div class="graph-reader-header">
                 <h3 id="graphReaderTitle">—</h3>
+                <button onclick="toggleGraphReaderExpand()" title="Agrandir / Réduire">⇱</button>
                 <button onclick="closeGraphReader()">✕</button>
             </div>
             <div class="graph-reader-body" id="graphReaderBody"></div>
@@ -3173,14 +3213,17 @@ let d3Zoom = null;
 let d3SvgG = null;
 let graphNodeMap = {};
 let selectedGraphNode = null;
+let graphTickQueued = false;
+let graphCurrentZoomK = 1;
+
+let graphDataLoaded = false;
 
 const GROUP_COLORS = { mail: '#89b4fa', md: '#a6e3a1', attachment: '#fab387', orphan: '#6c7086' };
 
 async function initGraphIfNeeded() {
-    if (d3Sim) return;
+    if (graphDataLoaded) return;
     const svg = document.getElementById('graphSvg');
     if (!svg) return;
-    svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#6c7086" font-size="13">Chargement du coffre…</text>';
     try {
         const api = window.electronAPI;
         if (api && api.scanVaultGraph) {
@@ -3191,40 +3234,59 @@ async function initGraphIfNeeded() {
             graphData = await r.json();
         }
         if (graphData.error) throw new Error(graphData.error);
-        buildD3Graph();
+        graphDataLoaded = true;
+        // Build node map for sidebar list
+        graphNodeMap = {};
+        graphData.nodes.forEach(n => { graphNodeMap[n.id] = n; });
         buildNodeList();
         updateGraphStats();
+        // Show placeholder — graph renders only on search
+        showGraphPlaceholder();
     } catch (err) {
         console.error('Graph load error:', err);
         svg.innerHTML = '<text x="50%" y="50%" text-anchor="middle" fill="#f38ba8" font-size="12">Erreur : ' + err.message + '</text>';
     }
 }
 
-function buildD3Graph() {
+function showGraphPlaceholder() {
+    // Destroy any running simulation
+    if (d3Sim) { d3Sim.stop(); d3Sim = null; }
+    const svg = d3.select('#graphSvg');
+    svg.selectAll('*').remove();
+    svg.node().__d3refs = null;
+    document.getElementById('graphPlaceholder').style.display = '';
+    document.getElementById('graphZoomControls').style.display = 'none';
+}
+
+function buildD3Graph(subNodes, subEdges, highlightIds) {
+    // Stop previous simulation
+    if (d3Sim) { d3Sim.stop(); d3Sim = null; }
+
     const svg = d3.select('#graphSvg');
     svg.selectAll('*').remove();
     const rect = svg.node().getBoundingClientRect();
     const W = rect.width || 800, H = rect.height || 600;
 
-    // Build node map for quick lookup
-    graphNodeMap = {};
-    graphData.nodes.forEach(n => { graphNodeMap[n.id] = n; });
-
     // Clone data for D3 (it mutates objects)
-    const nodes = graphData.nodes.map(n => ({ ...n }));
+    const nodes = subNodes.map(n => ({ ...n }));
     const nodeIndex = {};
     nodes.forEach((n, i) => { nodeIndex[n.id] = i; });
-    const links = graphData.edges
+    const links = subEdges
         .filter(e => e.source in nodeIndex && e.target in nodeIndex)
         .map(e => ({ source: e.source, target: e.target }));
 
-    // Zoom behavior
-    d3Zoom = d3.zoom().scaleExtent([0.05, 8]).on('zoom', (event) => {
+    // Zoom behavior — cap at 4x to avoid GPU tile memory overflow in Electron
+    d3Zoom = d3.zoom().scaleExtent([0.05, 4]).on('zoom', (event) => {
         d3SvgG.attr('transform', event.transform);
+        const k = event.transform.k;
+        if (Math.abs(k - graphCurrentZoomK) > 0.15 || (k >= 0.6) !== (graphCurrentZoomK >= 0.6)) {
+            graphCurrentZoomK = k;
+            updateLabelsVisibility(k);
+        }
     });
     svg.call(d3Zoom);
 
-    d3SvgG = svg.append('g');
+    d3SvgG = svg.append('g').attr('class', 'graph-g');
 
     // Links
     const link = d3SvgG.append('g').attr('class', 'links')
@@ -3236,7 +3298,9 @@ function buildD3Graph() {
         .selectAll('circle').data(nodes).join('circle')
         .attr('r', d => d.type === 'orphan' ? 3 : (d.type === 'attachment' ? 4 : 5))
         .attr('fill', d => GROUP_COLORS[d.group] || '#6c7086')
-        .attr('stroke', '#1e1e2e').attr('stroke-width', 0.5)
+        .attr('stroke', d => highlightIds && highlightIds.has(d.id) ? '#cdd6f4' : '#1e1e2e')
+        .attr('stroke-width', d => highlightIds && highlightIds.has(d.id) ? 1.5 : 0.5)
+        .attr('opacity', d => highlightIds && !highlightIds.has(d.id) ? 0.4 : 1)
         .attr('cursor', 'pointer')
         .on('click', (event, d) => {
             event.stopPropagation();
@@ -3248,33 +3312,62 @@ function buildD3Graph() {
             .on('end', (event, d) => { if (!event.active) d3Sim.alphaTarget(0); d.fx = null; d.fy = null; })
         );
 
-    // Labels (only for larger nodes)
+    // Labels (hidden by default, shown at sufficient zoom)
     const label = d3SvgG.append('g').attr('class', 'labels')
         .selectAll('text').data(nodes).join('text')
         .text(d => d.label.length > 25 ? d.label.slice(0, 22) + '…' : d.label)
         .attr('font-size', 7).attr('fill', '#6c7086')
         .attr('text-anchor', 'middle').attr('dy', d => (d.type === 'orphan' ? 8 : 12))
         .attr('pointer-events', 'none')
-        .style('display', d => d.type === 'orphan' ? 'none' : null);
+        .style('display', 'none');
 
     // Click on background to deselect
     svg.on('click', () => { clearGraphHighlight(nodes, links); closeGraphReader(); });
 
-    // Force simulation
+    // Force simulation — rAF-batched rendering
+    svg.node().classList.add('simulating');
+
+    function renderTick() {
+        graphTickQueued = false;
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        node.attr('cx', d => d.x).attr('cy', d => d.y);
+        label.attr('x', d => d.x).attr('y', d => d.y);
+    }
+
     d3Sim = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(links).id(d => d.id).distance(60))
         .force('charge', d3.forceManyBody().strength(-50).distanceMax(300))
         .force('center', d3.forceCenter(W / 2, H / 2))
         .force('collision', d3.forceCollide().radius(8))
+        .alphaDecay(0.04)
         .on('tick', () => {
-            link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-            node.attr('cx', d => d.x).attr('cy', d => d.y);
-            label.attr('x', d => d.x).attr('y', d => d.y);
+            if (!graphTickQueued) {
+                graphTickQueued = true;
+                requestAnimationFrame(renderTick);
+            }
+        })
+        .on('end', () => {
+            svg.node().classList.remove('simulating');
+            renderTick();
+            updateLabelsVisibility(graphCurrentZoomK);
         });
 
     // Store references for highlighting
     svg.node().__d3refs = { node, link, label, nodes, links };
+}
+
+function updateLabelsVisibility(k) {
+    const svg = d3.select('#graphSvg');
+    const refs = svg.node()?.__d3refs;
+    if (!refs) return;
+    // Only show labels when zoomed in enough (k >= 0.6), never for orphans
+    if (selectedGraphNode) return; // Don't override highlight display logic
+    refs.label.style('display', d => {
+        if (d.type === 'orphan') return 'none';
+        if (graphHiddenGroups.has(d.group)) return 'none';
+        return k >= 0.6 ? null : 'none';
+    });
 }
 
 function onNodeClick(d, nodes, links) {
@@ -3323,43 +3416,156 @@ function clearGraphHighlight(nodes, links) {
     if (!refs) return;
     refs.node.attr('opacity', 1).attr('r', d => d.type === 'orphan' ? 3 : (d.type === 'attachment' ? 4 : 5));
     refs.link.attr('opacity', 0.5).attr('stroke', '#313244');
-    refs.label.attr('opacity', 1).style('display', d => d.type === 'orphan' ? 'none' : null);
+    refs.label.attr('opacity', 1);
+    updateLabelsVisibility(graphCurrentZoomK);
     document.querySelectorAll('#graphNodeList .node-item').forEach(el => el.classList.remove('active'));
 }
 
 async function openGraphReader(title, relpath) {
     const panel = document.getElementById('graphReader');
-    document.getElementById('graphReaderTitle').textContent = title;
-    document.getElementById('graphReaderBody').textContent = 'Chargement…';
+    const titleEl = document.getElementById('graphReaderTitle');
+    const body = document.getElementById('graphReaderBody');
+    titleEl.textContent = title;
+    body.innerHTML = '';
+    body.textContent = 'Chargement…';
+    body.style.whiteSpace = 'pre-wrap';
     panel.classList.add('open');
+
+    const ext = relpath.split('.').pop().toLowerCase();
+    const imageExts = ['png','jpg','jpeg','gif','svg','webp','bmp','ico'];
+    const pdfExts = ['pdf'];
+    const textExts = ['md','txt','csv','json','xml','yaml','yml','html','css','js','ts','py'];
+    const api = window.electronAPI;
+
     try {
-        const api = window.electronAPI;
-        let data;
-        if (api && api.readVaultFile) {
-            data = await api.readVaultFile(relpath);
+        // ── Images: inline preview ──
+        if (imageExts.includes(ext)) {
+            body.textContent = '';
+            body.style.whiteSpace = 'normal';
+            if (api && api.getVaultFileUrl) {
+                const res = await api.getVaultFileUrl(relpath);
+                if (res.ok) {
+                    const img = document.createElement('img');
+                    img.src = res.url;
+                    img.alt = title;
+                    body.appendChild(img);
+                } else {
+                    body.textContent = 'Erreur : ' + res.error;
+                }
+            } else {
+                body.textContent = 'Aperçu image non disponible (mode web).';
+            }
+
+        // ── PDF: inline embed ──
+        } else if (pdfExts.includes(ext)) {
+            body.textContent = '';
+            body.style.whiteSpace = 'normal';
+            if (api && api.getVaultFileUrl) {
+                const res = await api.getVaultFileUrl(relpath);
+                if (res.ok) {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = res.url;
+                    iframe.title = title;
+                    body.appendChild(iframe);
+                } else {
+                    body.textContent = 'Erreur : ' + res.error;
+                }
+            } else {
+                body.textContent = 'Aperçu PDF non disponible (mode web).';
+            }
+
+        // ── Text-based: read content ──
+        } else if (textExts.includes(ext)) {
+            let data;
+            if (api && api.readVaultFile) {
+                data = await api.readVaultFile(relpath);
+            } else {
+                const r = await fetch('/api/vault/read?path=' + encodeURIComponent(relpath));
+                data = await r.json();
+            }
+            if (data.ok) {
+                body.textContent = data.content;
+            } else {
+                body.textContent = 'Erreur : ' + (data.error || 'fichier introuvable');
+            }
+
+        // ── Other formats: open with system default ──
         } else {
-            const r = await fetch('/api/vault/read?path=' + encodeURIComponent(relpath));
-            data = await r.json();
-        }
-        if (data.ok) {
-            document.getElementById('graphReaderBody').textContent = data.content;
-        } else {
-            document.getElementById('graphReaderBody').textContent = 'Erreur: ' + (data.error || 'fichier introuvable');
+            body.textContent = '';
+            body.style.whiteSpace = 'normal';
+            const msg = document.createElement('div');
+            msg.style.cssText = 'text-align:center; padding:2rem 0; color:var(--text-muted); font-size:0.82rem;';
+            msg.textContent = 'Pas d\u2019aperçu pour les fichiers .' + ext;
+            body.appendChild(msg);
+            const btn = document.createElement('button');
+            btn.className = 'open-external-btn';
+            btn.innerHTML = '<i class="icon-external-link"></i> Ouvrir avec l\u2019application par défaut';
+            btn.onclick = async () => {
+                if (api && api.openVaultExternal) {
+                    const res = await api.openVaultExternal(relpath);
+                    if (!res.ok) alert('Erreur : ' + res.error);
+                }
+            };
+            body.appendChild(btn);
         }
     } catch (err) {
-        document.getElementById('graphReaderBody').textContent = 'Erreur : ' + err.message;
+        body.textContent = 'Erreur : ' + err.message;
     }
 }
 
 function closeGraphReader() {
     const panel = document.getElementById('graphReader');
-    if (panel) panel.classList.remove('open');
+    if (panel) { panel.classList.remove('open'); panel.style.width = ''; }
     if (d3Sim) {
         const svg = d3.select('#graphSvg');
         const refs = svg.node()?.__d3refs;
         if (refs) clearGraphHighlight(refs.nodes, refs.links);
     }
 }
+
+function toggleGraphReaderExpand() {
+    const panel = document.getElementById('graphReader');
+    if (!panel) return;
+    const wrap = panel.parentElement;
+    const maxW = wrap.getBoundingClientRect().width;
+    const cur = panel.getBoundingClientRect().width;
+    panel.style.transition = 'width 0.2s ease';
+    if (cur < maxW * 0.7) {
+        panel.style.width = '85%';
+    } else {
+        panel.style.width = '380px';
+    }
+    setTimeout(() => { panel.style.transition = ''; }, 250);
+}
+
+// Resize drag handle for graph reader
+(function initGraphReaderResize() {
+    let dragging = false, startX = 0, startW = 0;
+    document.addEventListener('mousedown', (e) => {
+        if (e.target.id !== 'graphReaderResize') return;
+        const panel = document.getElementById('graphReader');
+        dragging = true;
+        startX = e.clientX;
+        startW = panel.getBoundingClientRect().width;
+        panel.style.transition = 'none';
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const panel = document.getElementById('graphReader');
+        const newW = Math.max(260, startW - (e.clientX - startX));
+        const maxW = panel.parentElement.getBoundingClientRect().width * 0.85;
+        panel.style.width = Math.min(newW, maxW) + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+})();
 
 function buildNodeList() {
     const list = document.getElementById('graphNodeList');
@@ -3377,17 +3583,25 @@ function buildNodeList() {
 }
 
 function focusGraphNode(nodeId) {
-    const svg = d3.select('#graphSvg');
-    const refs = svg.node()?.__d3refs;
-    if (!refs) return;
-    const target = refs.nodes.find(n => n.id === nodeId);
-    if (!target) return;
-    // Animate zoom to node
-    const svgEl = svg.node();
-    const rect = svgEl.getBoundingClientRect();
-    const transform = d3.zoomIdentity.translate(rect.width / 2, rect.height / 2).scale(2).translate(-target.x, -target.y);
-    svg.transition().duration(500).call(d3Zoom.transform, transform);
-    onNodeClick(target, refs.nodes, refs.links);
+    const node = graphNodeMap[nodeId];
+    if (!node) return;
+    // Trigger a search for this node's label to build its subgraph
+    const input = document.getElementById('graphSearchInput');
+    input.value = node.label;
+    filterGraphNodes(node.label);
+    // Now focus on the node in the rendered graph
+    setTimeout(() => {
+        const svg = d3.select('#graphSvg');
+        const refs = svg.node()?.__d3refs;
+        if (!refs) return;
+        const target = refs.nodes.find(n => n.id === nodeId);
+        if (!target) return;
+        const svgEl = svg.node();
+        const rect = svgEl.getBoundingClientRect();
+        const transform = d3.zoomIdentity.translate(rect.width / 2, rect.height / 2).scale(2).translate(-target.x, -target.y);
+        svg.transition().duration(500).call(d3Zoom.transform, transform);
+        onNodeClick(target, refs.nodes, refs.links);
+    }, 100);
 }
 
 function selectNodeInList(nodeId) {
@@ -3420,30 +3634,45 @@ function filterGraphNodes(query) {
         if (visible) shown++;
     });
     document.getElementById('graphSearchResults').textContent = q ? shown + ' résultat(s)' : '';
-    // Also filter D3 graph
-    if (d3Sim) {
-        const svg = d3.select('#graphSvg');
-        const refs = svg.node()?.__d3refs;
-        if (refs) {
-            refs.node.style('display', d => {
-                const match = !q || d.label.toLowerCase().includes(q);
-                const hidden = graphHiddenGroups.has(d.group);
-                return (match && !hidden) ? null : 'none';
-            });
-            refs.label.style('display', d => {
-                const match = !q || d.label.toLowerCase().includes(q);
-                const hidden = graphHiddenGroups.has(d.group);
-                return (match && !hidden && d.type !== 'orphan') ? null : 'none';
-            });
-            refs.link.style('display', l => {
-                const src = typeof l.source === 'object' ? l.source : { id: l.source };
-                const tgt = typeof l.target === 'object' ? l.target : { id: l.target };
-                const srcVis = (!q || src.label?.toLowerCase().includes(q)) && !graphHiddenGroups.has(src.group);
-                const tgtVis = (!q || tgt.label?.toLowerCase().includes(q)) && !graphHiddenGroups.has(tgt.group);
-                return (srcVis && tgtVis) ? null : 'none';
-            });
-        }
+
+    // Build filtered subgraph when query >= 2 chars, otherwise show placeholder
+    if (q.length >= 2 && graphDataLoaded) {
+        buildFilteredGraph(q);
+    } else {
+        showGraphPlaceholder();
     }
+}
+
+function buildFilteredGraph(query) {
+    const q = query.toLowerCase();
+    // Collect matching node IDs
+    const matchIds = new Set();
+    graphData.nodes.forEach(n => {
+        if (graphHiddenGroups.has(n.group)) return;
+        if (n.label.toLowerCase().includes(q)) matchIds.add(n.id);
+    });
+    // Also include direct neighbors of matched nodes for context
+    const neighborIds = new Set(matchIds);
+    graphData.edges.forEach(e => {
+        if (matchIds.has(e.source)) neighborIds.add(e.target);
+        if (matchIds.has(e.target)) neighborIds.add(e.source);
+    });
+    // Filter out hidden groups from neighbors too
+    const visibleIds = new Set();
+    neighborIds.forEach(id => {
+        const n = graphNodeMap[id];
+        if (n && !graphHiddenGroups.has(n.group)) visibleIds.add(id);
+    });
+    if (visibleIds.size === 0) {
+        showGraphPlaceholder();
+        return;
+    }
+    // Build subgraph data
+    const subNodes = graphData.nodes.filter(n => visibleIds.has(n.id));
+    const subEdges = graphData.edges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
+    buildD3Graph(subNodes, subEdges, matchIds);
+    document.getElementById('graphPlaceholder').style.display = 'none';
+    document.getElementById('graphZoomControls').style.display = '';
 }
 
 function toggleGraphGroup(checkbox) {
