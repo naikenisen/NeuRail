@@ -4,6 +4,7 @@
 import csv
 import http.server
 import json
+import logging
 import os
 import subprocess
 import time
@@ -16,7 +17,15 @@ PORT = 8080
 DIR = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(DIR, "data.json")
 CONTACTS_CSV = os.path.join(DIR, "contacts_complets_v2.csv")
+LOG_FILE = os.path.join(DIR, "api_errors.log")
 DOWNLOADS = str(Path.home() / "Téléchargements")
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.ERROR,
+)
+logger = logging.getLogger("todoapp")
 if not os.path.isdir(DOWNLOADS):
     DOWNLOADS = str(Path.home() / "Downloads")
 if not os.path.isdir(DOWNLOADS):
@@ -55,8 +64,8 @@ def load_contacts():
     return contacts
 
 
-def ai_call(token, prompt, retries=3):
-    """Generic AI call via Google Gemini API with retry on 429."""
+def ai_call(token, prompt):
+    """Generic AI call via Google Gemini API — single request."""
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.3},
@@ -65,26 +74,25 @@ def ai_call(token, prompt, retries=3):
     url = ("https://generativelanguage.googleapis.com/v1beta/"
            f"models/gemini-2.0-flash:generateContent?key={token}")
 
-    for attempt in range(retries):
-        req = urllib.request.Request(
-            url, data=body,
-            headers={"Content-Type": "application/json"},
-        )
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            result = json.loads(r.read())
+        return result["candidates"][0]["content"]["parts"][0]["text"]
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
         try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                result = json.loads(r.read())
-            return result["candidates"][0]["content"]["parts"][0]["text"]
-        except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < retries - 1:
-                wait = int(e.headers.get("Retry-After", 2 ** (attempt + 1)))
-                time.sleep(wait)
-                continue
-            error_body = e.read().decode()
-            try:
-                msg = json.loads(error_body).get("error", {}).get("message", error_body)
-            except Exception:
-                msg = error_body
-            raise RuntimeError(f"Gemini {e.code}: {msg}")
+            msg = json.loads(error_body).get("error", {}).get("message", error_body)
+        except Exception:
+            msg = error_body
+        logger.error("Gemini API %d: %s", e.code, msg)
+        raise RuntimeError(f"Gemini {e.code}: {msg}")
+    except Exception as e:
+        logger.error("Gemini API error: %s", e)
+        raise
 
 
 def ai_reformulate(payload):
