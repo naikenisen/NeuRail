@@ -316,7 +316,7 @@
         .modal h2 { margin-bottom: 1.5rem; font-size: 1.2rem; }
         .form-group { margin-bottom: 1.25rem; }
         .form-group label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; font-weight: 600; }
-        .form-group input[type="text"], .form-group input[type="password"] {
+        .form-group input[type="text"], .form-group input[type="password"], .form-group input[type="date"], .form-group input[type="time"], .form-group textarea {
             width: 100%; padding: 0.5rem 0.7rem; border: 1px solid var(--card-border);
             border-radius: var(--radius-sm); background: var(--progress-bg); color: var(--text);
             font-size: 0.85rem; font-family: inherit;
@@ -606,6 +606,151 @@
         }
         .timeline-popover-actions button:hover { border-color: var(--accent-blue); background: rgba(74,144,244,0.1); }
         .timeline-popover-actions button.danger:hover { border-color: #ef4444; background: rgba(239,68,68,0.1); color: #ef4444; }
+
+        /* ─── Agenda Weekly View ───────────────────── */
+        .agenda-week-shell {
+            background: var(--bg-surface);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            min-height: 460px;
+        }
+        .agenda-week-header {
+            display: grid;
+            grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
+            border-bottom: 1px solid var(--card-border);
+            background: rgba(255,255,255,0.02);
+        }
+        .agenda-week-header .day {
+            padding: 0.65rem 0.45rem;
+            text-align: center;
+            font-size: 0.74rem;
+            border-left: 1px solid var(--card-border);
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .agenda-week-header .day strong {
+            display: block;
+            color: var(--text);
+            font-size: 0.82rem;
+            margin-top: 0.15rem;
+        }
+        .agenda-week-header .day.today strong {
+            color: var(--accent-blue);
+        }
+        .agenda-all-day-row {
+            display: grid;
+            grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
+            min-height: 56px;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .agenda-all-day-label,
+        .agenda-time-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            border-right: 1px solid var(--card-border);
+            background: rgba(0,0,0,0.15);
+        }
+        .agenda-all-day-cell {
+            border-left: 1px solid var(--card-border);
+            padding: 0.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.22rem;
+            min-height: 56px;
+        }
+        .agenda-week-grid-wrap {
+            overflow: auto;
+            max-height: calc(100vh - 300px);
+        }
+        .agenda-time-grid {
+            display: grid;
+            grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
+            position: relative;
+            min-height: 1180px;
+        }
+        .agenda-hours-column {
+            border-right: 1px solid var(--card-border);
+            background: rgba(0,0,0,0.15);
+        }
+        .agenda-hour-slot {
+            height: 48px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 0.2rem;
+        }
+        .agenda-day-column {
+            border-left: 1px solid var(--card-border);
+            position: relative;
+            background-image: linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+            background-size: 100% 48px;
+            min-height: 1152px;
+        }
+        .agenda-day-column.today {
+            background-color: rgba(137,180,250,0.05);
+        }
+        .agenda-event-card {
+            border-radius: 6px;
+            padding: 0.28rem 0.35rem;
+            font-size: 0.71rem;
+            line-height: 1.25;
+            border: 1px solid rgba(137,180,250,0.35);
+            background: rgba(137,180,250,0.16);
+            color: var(--text);
+            cursor: pointer;
+            overflow: hidden;
+        }
+        .agenda-event-card strong {
+            display: block;
+            font-size: 0.72rem;
+            margin-bottom: 0.15rem;
+        }
+        .agenda-event-card.all-day {
+            position: static;
+            background: rgba(203,166,247,0.2);
+            border-color: rgba(203,166,247,0.35);
+        }
+        .agenda-event-card.timed {
+            position: absolute;
+            left: 4px;
+            right: 4px;
+            z-index: 2;
+        }
+        .agenda-event-meta {
+            color: var(--text-muted);
+            font-size: 0.67rem;
+        }
+        .agenda-empty-state {
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .agenda-event-actions {
+            display: flex;
+            gap: 0.35rem;
+            margin-top: 0.35rem;
+            flex-wrap: wrap;
+        }
+        .agenda-event-actions button {
+            border: 1px solid var(--card-border);
+            background: var(--progress-bg);
+            color: var(--text);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.68rem;
+            padding: 0.2rem 0.45rem;
+        }
+        .agenda-event-actions button:hover {
+            border-color: var(--accent-blue);
+        }
 
         /* ─── Add Task Buttons (two-button layout) ──── */
         .add-task-buttons { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
@@ -1160,23 +1305,24 @@
     <!-- AGENDA TAB -->
     <div class="tab-content" id="tab-agenda">
         <header>
-            <h1><i class="icon-calendar-days"></i> Agenda Google</h1>
+            <h1><i class="icon-calendar-days"></i> Agenda hebdomadaire</h1>
             <div class="header-actions">
-                <select id="agendaAccount" onchange="loadAgendaMonth()" style="min-width:260px"></select>
+                <select id="agendaAccount" onchange="loadAgendaWeek()" style="min-width:260px"></select>
                 <button onclick="connectAgendaOAuth()"><i class="icon-link"></i> Connecter Google</button>
-                <button onclick="agendaPrevMonth()">◀</button>
+                <button onclick="agendaPrevWeek()">◀</button>
                 <button onclick="agendaToday()">Aujourd'hui</button>
-                <button onclick="agendaNextMonth()">▶</button>
-                <button onclick="loadAgendaMonth()"><i class="icon-refresh-cw"></i> Actualiser</button>
+                <button onclick="agendaNextWeek()">▶</button>
+                <button onclick="openAgendaCreateModal()"><i class="icon-plus"></i> Nouvel événement</button>
+                <button onclick="loadAgendaWeek()"><i class="icon-refresh-cw"></i> Actualiser</button>
             </div>
         </header>
         <div class="global-progress" style="position:static">
             <div class="global-progress-header">
-                <span id="agendaMonthLabel">Mois</span>
+                <span id="agendaMonthLabel">Semaine</span>
                 <span class="counter" id="agendaCountLabel">0 événement</span>
             </div>
         </div>
-        <div id="agendaEvents" class="mail-pending-list"></div>
+        <div id="agendaEvents" class="agenda-week-shell"></div>
     </div>
 
     <!-- BROWSER TAB -->
@@ -1391,6 +1537,74 @@
     </div>
 </div>
 
+<!-- Agenda Create Modal -->
+<div class="modal-overlay" id="agendaCreateModal" onclick="if(event.target===this)closeAgendaCreateModal()">
+    <div class="modal" style="max-width:520px">
+        <h2><i class="icon-plus"></i> Nouvel événement</h2>
+        <div class="form-group">
+            <label>Titre</label>
+            <input type="text" id="agendaCreateSummary" placeholder="Titre de l'événement">
+        </div>
+        <div class="form-group">
+            <label>Journée entière</label>
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+                <input type="checkbox" id="agendaCreateAllDay" onchange="toggleAgendaCreateAllDay()">
+                Événement toute la journée
+            </label>
+        </div>
+        <div class="form-group" id="agendaCreateDateGroup">
+            <label>Date</label>
+            <input type="date" id="agendaCreateDate">
+        </div>
+        <div class="form-group" id="agendaCreateTimeGroup" style="display:flex;gap:0.6rem">
+            <div style="flex:1">
+                <label>Début</label>
+                <input type="time" id="agendaCreateStartTime" value="09:00">
+            </div>
+            <div style="flex:1">
+                <label>Fin</label>
+                <input type="time" id="agendaCreateEndTime" value="10:00">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Lieu</label>
+            <input type="text" id="agendaCreateLocation" placeholder="Salle, visio, adresse...">
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <textarea id="agendaCreateDescription" rows="4" placeholder="Détails"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button onclick="closeAgendaCreateModal()">Annuler</button>
+            <button class="btn-primary" onclick="createAgendaEvent()"><i class="icon-save"></i> Créer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Agenda Event Modal -->
+<div class="modal-overlay" id="agendaEventModal" onclick="if(event.target===this)closeAgendaEventModal()">
+    <div class="modal" style="max-width:560px">
+        <h2 id="agendaEventTitle">Événement</h2>
+        <div class="mail-field">
+            <label>Période</label>
+            <div id="agendaEventPeriod" class="inbox-item-preview" style="white-space:normal"></div>
+        </div>
+        <div class="mail-field" id="agendaEventLocationWrap" style="display:none">
+            <label>Lieu</label>
+            <div id="agendaEventLocation" class="inbox-item-preview" style="white-space:normal"></div>
+        </div>
+        <div class="mail-field" id="agendaEventDescriptionWrap" style="display:none">
+            <label>Description</label>
+            <div id="agendaEventDescription" class="inbox-item-preview" style="white-space:pre-wrap"></div>
+        </div>
+        <div class="modal-actions">
+            <button id="agendaEventOpenBtn" onclick="openSelectedAgendaEvent()"><i class="icon-external-link"></i> Ouvrir</button>
+            <button class="btn-danger" onclick="deleteSelectedAgendaEvent()"><i class="icon-trash-2"></i> Supprimer</button>
+            <button onclick="closeAgendaEventModal()">Fermer</button>
+        </div>
+    </div>
+</div>
+
 <!-- Loading Overlay -->
 <div class="loading-overlay" id="loading">
     <div class="loading-spinner"></div>
@@ -1413,7 +1627,9 @@ let currentTab = 'todo';
 let currentReminder = null;
 let selectedMailTask = null;
 let timelineMonth = new Date();
-let agendaMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let agendaWeekStart = new Date();
+let agendaEventsCache = [];
+let selectedAgendaEventId = null;
 let browserTabs = [];
 let activeBrowserTabId = null;
 const GITHUB_BROWSER_TAB_ID = 'github-main';
@@ -4832,12 +5048,55 @@ async function autofillGithubLogin() {
 /* ═══════════════════════════════════════════════════════
    Agenda Google (Calendar API)
    ═══════════════════════════════════════════════════════ */
+function startOfWeek(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+}
+
+function toYmd(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function toLocalDateTimeValue(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${d}T${h}:${min}`;
+}
+
+function formatAgendaEventPeriod(ev) {
+    if (ev.allDay) {
+        const start = ev.start || '';
+        const end = ev.end || '';
+        return `${start} -> ${end} (journée entière)`;
+    }
+    const start = ev.start ? new Date(ev.start) : null;
+    const end = ev.end ? new Date(ev.end) : null;
+    const startLabel = start && !isNaN(start.getTime())
+        ? start.toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' })
+        : ev.start;
+    const endLabel = end && !isNaN(end.getTime())
+        ? end.toLocaleString('fr-FR', { dateStyle: 'full', timeStyle: 'short' })
+        : ev.end;
+    return `${startLabel} -> ${endLabel}`;
+}
+
 async function initAgendaIfNeeded() {
+    agendaWeekStart = startOfWeek(agendaWeekStart || new Date());
     if (!agendaInitialized) {
         agendaInitialized = true;
         await loadAgendaAccounts();
     }
-    await loadAgendaMonth();
+    await loadAgendaWeek();
 }
 
 async function loadAgendaAccounts() {
@@ -4871,7 +5130,7 @@ async function connectAgendaOAuth() {
     }
     showLoading('Ouverture de la connexion Google pour Agenda…');
     try {
-        const scope = 'https://mail.google.com/ https://www.googleapis.com/auth/calendar.readonly';
+        const scope = 'https://mail.google.com/ https://www.googleapis.com/auth/calendar';
         const r = await fetch('/api/oauth/google/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4895,23 +5154,158 @@ async function connectAgendaOAuth() {
     }
 }
 
-function agendaPrevMonth() {
-    agendaMonth = new Date(agendaMonth.getFullYear(), agendaMonth.getMonth() - 1, 1);
-    loadAgendaMonth();
+function agendaPrevWeek() {
+    agendaWeekStart = new Date(agendaWeekStart.getFullYear(), agendaWeekStart.getMonth(), agendaWeekStart.getDate() - 7);
+    agendaWeekStart = startOfWeek(agendaWeekStart);
+    loadAgendaWeek();
 }
 
-function agendaNextMonth() {
-    agendaMonth = new Date(agendaMonth.getFullYear(), agendaMonth.getMonth() + 1, 1);
-    loadAgendaMonth();
+function agendaNextWeek() {
+    agendaWeekStart = new Date(agendaWeekStart.getFullYear(), agendaWeekStart.getMonth(), agendaWeekStart.getDate() + 7);
+    agendaWeekStart = startOfWeek(agendaWeekStart);
+    loadAgendaWeek();
 }
 
 function agendaToday() {
-    const now = new Date();
-    agendaMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    loadAgendaMonth();
+    agendaWeekStart = startOfWeek(new Date());
+    loadAgendaWeek();
 }
 
-async function loadAgendaMonth() {
+function buildAgendaWeekDays(weekStartDate) {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStartDate);
+        d.setDate(weekStartDate.getDate() + i);
+        d.setHours(0, 0, 0, 0);
+        days.push(d);
+    }
+    return days;
+}
+
+function splitTimedEventIntoWeekDays(ev, weekDays) {
+    const out = [];
+    const start = ev.start ? new Date(ev.start) : null;
+    const endRaw = ev.end ? new Date(ev.end) : null;
+    if (!start || isNaN(start.getTime())) return out;
+    const end = endRaw && !isNaN(endRaw.getTime()) ? endRaw : new Date(start.getTime() + 30 * 60 * 1000);
+
+    weekDays.forEach((day) => {
+        const dayStart = new Date(day);
+        const dayEnd = new Date(day);
+        dayEnd.setDate(dayEnd.getDate() + 1);
+
+        const segStart = start > dayStart ? start : dayStart;
+        const segEnd = end < dayEnd ? end : dayEnd;
+        if (segEnd <= segStart) return;
+
+        const startMin = segStart.getHours() * 60 + segStart.getMinutes();
+        const endMin = segEnd.getHours() * 60 + segEnd.getMinutes();
+        out.push({
+            event: ev,
+            dayKey: toYmd(day),
+            startMin,
+            endMin: Math.max(endMin, startMin + 15),
+        });
+    });
+    return out;
+}
+
+function renderAgendaWeek(events) {
+    const container = document.getElementById('agendaEvents');
+    if (!container) return;
+
+    const weekStartDate = startOfWeek(agendaWeekStart || new Date());
+    const weekDays = buildAgendaWeekDays(weekStartDate);
+    const todayYmd = toYmd(new Date());
+    const allDayByDay = {};
+    const timedByDay = {};
+    weekDays.forEach((d) => {
+        allDayByDay[toYmd(d)] = [];
+        timedByDay[toYmd(d)] = [];
+    });
+
+    (events || []).forEach((ev) => {
+        if (ev.allDay) {
+            const startDate = ev.start ? new Date(`${ev.start}T00:00:00`) : null;
+            const endDate = ev.end ? new Date(`${ev.end}T00:00:00`) : null;
+            if (!startDate || isNaN(startDate.getTime())) return;
+            const rangeEnd = endDate && !isNaN(endDate.getTime()) ? endDate : new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+
+            weekDays.forEach((day) => {
+                const key = toYmd(day);
+                if (day >= startDate && day < rangeEnd) {
+                    allDayByDay[key].push(ev);
+                }
+            });
+        } else {
+            splitTimedEventIntoWeekDays(ev, weekDays).forEach((segment) => {
+                timedByDay[segment.dayKey].push(segment);
+            });
+        }
+    });
+
+    const weekHeader = weekDays.map((day) => {
+        const key = toYmd(day);
+        const cls = key === todayYmd ? 'day today' : 'day';
+        const weekday = day.toLocaleDateString('fr-FR', { weekday: 'short' });
+        const dayLabel = day.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+        return `<div class="${cls}">${esc(weekday)}<strong>${esc(dayLabel)}</strong></div>`;
+    }).join('');
+
+    const allDayRow = weekDays.map((day) => {
+        const key = toYmd(day);
+        const cards = allDayByDay[key].map((ev) => {
+            const encodedId = encodeURIComponent(ev.id || '');
+            return `<div class="agenda-event-card all-day" onclick="openAgendaEventModal('${encodedId}')">
+                <strong>${esc(ev.summary || '(Sans titre)')}</strong>
+                <div class="agenda-event-meta">Journée entière</div>
+            </div>`;
+        }).join('');
+        return `<div class="agenda-all-day-cell">${cards}</div>`;
+    }).join('');
+
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+    const hoursHtml = hours.map((h) => `<div class="agenda-hour-slot">${String(h).padStart(2, '0')}:00</div>`).join('');
+
+    const dayColumns = weekDays.map((day) => {
+        const key = toYmd(day);
+        const cls = key === todayYmd ? 'agenda-day-column today' : 'agenda-day-column';
+        const segments = (timedByDay[key] || []).sort((a, b) => a.startMin - b.startMin);
+        const eventsHtml = segments.map((segment) => {
+            const encodedId = encodeURIComponent(segment.event.id || '');
+            const top = Math.max(0, (segment.startMin / 60) * 48);
+            const duration = Math.max(18, ((segment.endMin - segment.startMin) / 60) * 48);
+            const startLabel = `${String(Math.floor(segment.startMin / 60)).padStart(2, '0')}:${String(segment.startMin % 60).padStart(2, '0')}`;
+            const endLabel = `${String(Math.floor(segment.endMin / 60)).padStart(2, '0')}:${String(segment.endMin % 60).padStart(2, '0')}`;
+            return `<div class="agenda-event-card timed" style="top:${top}px;height:${duration}px" onclick="openAgendaEventModal('${encodedId}')">
+                <strong>${esc(segment.event.summary || '(Sans titre)')}</strong>
+                <div class="agenda-event-meta">${esc(startLabel)} - ${esc(endLabel)}</div>
+            </div>`;
+        }).join('');
+        return `<div class="${cls}">${eventsHtml}</div>`;
+    }).join('');
+
+    const hasEvents = (events || []).length > 0;
+    container.innerHTML = `
+        <div class="agenda-week-header">
+            <div class="agenda-time-label">Heure</div>
+            ${weekHeader}
+        </div>
+        <div class="agenda-all-day-row">
+            <div class="agenda-all-day-label">Toute la journée</div>
+            ${allDayRow}
+        </div>
+        <div class="agenda-week-grid-wrap">
+            <div class="agenda-time-grid">
+                <div class="agenda-hours-column">${hoursHtml}</div>
+                ${dayColumns}
+            </div>
+        </div>
+        ${!hasEvents ? '<div class="agenda-empty-state">Aucun événement cette semaine. Clique sur "Nouvel événement" pour commencer.</div>' : ''}
+    `;
+}
+
+async function loadAgendaWeek() {
     const monthLabel = document.getElementById('agendaMonthLabel');
     const countLabel = document.getElementById('agendaCountLabel');
     const container = document.getElementById('agendaEvents');
@@ -4919,18 +5313,24 @@ async function loadAgendaMonth() {
     if (!monthLabel || !countLabel || !container || !select) return;
 
     const account = (select.value || '').trim();
-    monthLabel.textContent = agendaMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    agendaWeekStart = startOfWeek(agendaWeekStart || new Date());
+    const weekEnd = new Date(agendaWeekStart);
+    weekEnd.setDate(agendaWeekStart.getDate() + 6);
+    const weekEndExclusive = new Date(agendaWeekStart);
+    weekEndExclusive.setDate(agendaWeekStart.getDate() + 7);
+
+    monthLabel.textContent = `${agendaWeekStart.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' })} - ${weekEnd.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`;
     if (!account) {
-        container.innerHTML = '<div class="mail-pending-empty">Aucun compte Google OAuth disponible.</div>';
+        container.innerHTML = '<div class="agenda-empty-state">Aucun compte Google OAuth disponible.</div>';
         countLabel.textContent = '0 événement';
         return;
     }
 
-    container.innerHTML = '<div class="mail-pending-empty">Chargement des événements…</div>';
+    container.innerHTML = '<div class="agenda-empty-state">Chargement des événements…</div>';
     try {
-        const y = agendaMonth.getFullYear();
-        const m = agendaMonth.getMonth() + 1;
-        const r = await fetch(`/api/calendar/events?year=${y}&month=${m}&account=${encodeURIComponent(account)}`);
+        const start = toYmd(agendaWeekStart);
+        const end = toYmd(weekEndExclusive);
+        const r = await fetch(`/api/calendar/events?start=${start}&end=${end}&account=${encodeURIComponent(account)}`);
         const result = await r.json();
         if (!result.ok) {
             const errorCode = result.error_code || '';
@@ -4940,7 +5340,7 @@ async function loadAgendaMonth() {
                 const activationBtn = result.activation_url
                     ? `<button onclick="openAgendaEvent('${esc(result.activation_url)}')"><i class="icon-external-link"></i> Activer l'API Google Calendar</button>`
                     : '';
-                container.innerHTML = `<div class="mail-pending-empty" style="text-align:left;max-width:900px;margin:0 auto">
+                container.innerHTML = `<div class="agenda-empty-state" style="text-align:left;max-width:900px;margin:0 auto">
                     <strong>Google Calendar API est désactivée dans ton projet Google Cloud.</strong>
                     <div style="margin-top:0.5rem">1. Active l'API Calendar dans Google Cloud.</div>
                     <div>2. Attends 1 à 3 minutes.</div>
@@ -4949,7 +5349,7 @@ async function loadAgendaMonth() {
                     ${details}
                 </div>`;
             } else if (errorCode === 'CALENDAR_SCOPE_INSUFFICIENT') {
-                container.innerHTML = `<div class="mail-pending-empty" style="text-align:left;max-width:900px;margin:0 auto">
+                container.innerHTML = `<div class="agenda-empty-state" style="text-align:left;max-width:900px;margin:0 auto">
                     <strong>Le compte doit être reconnecté avec les droits Agenda.</strong>
                     <div style="margin-top:0.5rem">Clique sur "Connecter Google" puis accepte l'accès Calendar.</div>
                     <div class="mail-actions" style="margin-top:0.8rem">
@@ -4958,43 +5358,206 @@ async function loadAgendaMonth() {
                     ${details}
                 </div>`;
             } else {
-                container.innerHTML = '<div class="mail-pending-empty">Erreur: ' + esc(result.error || 'impossible de charger') + (result.details ? '<br><small>' + esc(result.details) + '</small>' : '') + '</div>';
+                container.innerHTML = '<div class="agenda-empty-state">Erreur: ' + esc(result.error || 'impossible de charger') + (result.details ? '<br><small>' + esc(result.details) + '</small>' : '') + '</div>';
             }
             countLabel.textContent = '0 événement';
             return;
         }
         const events = Array.isArray(result.events) ? result.events : [];
+        agendaEventsCache = events;
         countLabel.textContent = `${events.length} événement${events.length > 1 ? 's' : ''}`;
-        if (!events.length) {
-            container.innerHTML = '<div class="mail-pending-empty">Aucun événement sur cette période.</div>';
+        renderAgendaWeek(events);
+    } catch (e) {
+        container.innerHTML = '<div class="agenda-empty-state">Erreur réseau: ' + esc(e.message) + '</div>';
+        countLabel.textContent = '0 événement';
+    }
+}
+
+function openAgendaCreateModal() {
+    const modal = document.getElementById('agendaCreateModal');
+    if (!modal) return;
+    const baseDate = agendaWeekStart || startOfWeek(new Date());
+    document.getElementById('agendaCreateSummary').value = '';
+    document.getElementById('agendaCreateDate').value = toYmd(baseDate);
+    document.getElementById('agendaCreateStartTime').value = '09:00';
+    document.getElementById('agendaCreateEndTime').value = '10:00';
+    document.getElementById('agendaCreateLocation').value = '';
+    document.getElementById('agendaCreateDescription').value = '';
+    document.getElementById('agendaCreateAllDay').checked = false;
+    toggleAgendaCreateAllDay();
+    modal.classList.add('show');
+}
+
+function closeAgendaCreateModal() {
+    const modal = document.getElementById('agendaCreateModal');
+    if (modal) modal.classList.remove('show');
+}
+
+function toggleAgendaCreateAllDay() {
+    const allDay = document.getElementById('agendaCreateAllDay')?.checked;
+    const timeGroup = document.getElementById('agendaCreateTimeGroup');
+    if (timeGroup) timeGroup.style.display = allDay ? 'none' : 'flex';
+}
+
+async function createAgendaEvent() {
+    const account = (document.getElementById('agendaAccount')?.value || '').trim();
+    if (!account) {
+        showToast('Sélectionne un compte Agenda.', 'error');
+        return;
+    }
+
+    const summary = (document.getElementById('agendaCreateSummary')?.value || '').trim();
+    const date = (document.getElementById('agendaCreateDate')?.value || '').trim();
+    const allDay = !!document.getElementById('agendaCreateAllDay')?.checked;
+    const startTime = (document.getElementById('agendaCreateStartTime')?.value || '').trim();
+    const endTime = (document.getElementById('agendaCreateEndTime')?.value || '').trim();
+    const location = (document.getElementById('agendaCreateLocation')?.value || '').trim();
+    const description = (document.getElementById('agendaCreateDescription')?.value || '').trim();
+
+    if (!summary) {
+        showToast('Le titre est requis.', 'error');
+        return;
+    }
+    if (!date) {
+        showToast('La date est requise.', 'error');
+        return;
+    }
+
+    let payload;
+    if (allDay) {
+        const end = new Date(`${date}T00:00:00`);
+        end.setDate(end.getDate() + 1);
+        payload = {
+            account,
+            summary,
+            location,
+            description,
+            allDay: true,
+            startDate: date,
+            endDate: toYmd(end),
+        };
+    } else {
+        if (!startTime || !endTime) {
+            showToast('Heure de début et fin requises.', 'error');
+            return;
+        }
+        const startDateTime = new Date(`${date}T${startTime}`);
+        const endDateTime = new Date(`${date}T${endTime}`);
+        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime()) || endDateTime <= startDateTime) {
+            showToast('Plage horaire invalide.', 'error');
             return;
         }
 
-        container.innerHTML = events.map(ev => {
-            const startLabel = ev.allDay
-                ? ev.start
-                : new Date(ev.start).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
-            const endLabel = ev.allDay
-                ? ev.end
-                : new Date(ev.end).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
-            const desc = ev.description ? `<div class="inbox-item-preview" style="white-space:pre-wrap">${esc(ev.description)}</div>` : '';
-            const loc = ev.location ? `<div class="inbox-item-preview"><i class="icon-map-pin"></i> ${esc(ev.location)}</div>` : '';
-            const linkBtn = ev.htmlLink
-                ? `<button onclick="openAgendaEvent('${esc(ev.htmlLink)}')"><i class="icon-external-link"></i> Ouvrir</button>`
-                : '';
-            return `<div class="mail-item" style="margin-bottom:0.45rem">
-                <div class="mail-item-info" style="width:100%">
-                    <div class="mail-item-label">${esc(ev.summary || '(Sans titre)')}</div>
-                    <div class="mail-item-section">${esc(startLabel)} → ${esc(endLabel)}</div>
-                    ${loc}
-                    ${desc}
-                </div>
-                <div class="mail-item-actions">${linkBtn}</div>
-            </div>`;
-        }).join('');
+        payload = {
+            account,
+            summary,
+            location,
+            description,
+            allDay: false,
+            startDateTime: toLocalDateTimeValue(startDateTime),
+            endDateTime: toLocalDateTimeValue(endDateTime),
+        };
+    }
+
+    showLoading('Création de l\'événement…');
+    try {
+        const r = await fetch('/api/calendar/events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await r.json();
+        if (!result.ok) {
+            showToast('Erreur: ' + esc(result.error || result.details || 'impossible de créer'), 'error', 5000);
+            return;
+        }
+        closeAgendaCreateModal();
+        showToast('Événement créé.', 'success');
+        await loadAgendaWeek();
     } catch (e) {
-        container.innerHTML = '<div class="mail-pending-empty">Erreur réseau: ' + esc(e.message) + '</div>';
-        countLabel.textContent = '0 événement';
+        showToast('Erreur réseau: ' + e.message, 'error', 5000);
+    } finally {
+        hideLoading();
+    }
+}
+
+function openAgendaEventModal(encodedEventId) {
+    const eventId = decodeURIComponent(encodedEventId || '');
+    const ev = (agendaEventsCache || []).find((x) => (x.id || '') === eventId);
+    if (!ev) return;
+
+    selectedAgendaEventId = eventId;
+    document.getElementById('agendaEventTitle').textContent = ev.summary || '(Sans titre)';
+    document.getElementById('agendaEventPeriod').textContent = formatAgendaEventPeriod(ev);
+
+    const locationWrap = document.getElementById('agendaEventLocationWrap');
+    const location = document.getElementById('agendaEventLocation');
+    if (ev.location) {
+        location.textContent = ev.location;
+        locationWrap.style.display = '';
+    } else {
+        locationWrap.style.display = 'none';
+    }
+
+    const descWrap = document.getElementById('agendaEventDescriptionWrap');
+    const desc = document.getElementById('agendaEventDescription');
+    if (ev.description) {
+        desc.textContent = ev.description;
+        descWrap.style.display = '';
+    } else {
+        descWrap.style.display = 'none';
+    }
+
+    const openBtn = document.getElementById('agendaEventOpenBtn');
+    if (openBtn) openBtn.style.display = ev.htmlLink ? '' : 'none';
+
+    document.getElementById('agendaEventModal').classList.add('show');
+}
+
+function closeAgendaEventModal() {
+    selectedAgendaEventId = null;
+    document.getElementById('agendaEventModal')?.classList.remove('show');
+}
+
+function openSelectedAgendaEvent() {
+    if (!selectedAgendaEventId) return;
+    const ev = (agendaEventsCache || []).find((x) => (x.id || '') === selectedAgendaEventId);
+    if (!ev || !ev.htmlLink) return;
+    openAgendaEvent(ev.htmlLink);
+}
+
+async function deleteSelectedAgendaEvent() {
+    if (!selectedAgendaEventId) return;
+    const ev = (agendaEventsCache || []).find((x) => (x.id || '') === selectedAgendaEventId);
+    if (!ev) return;
+
+    if (!confirm(`Supprimer l'événement "${ev.summary || '(Sans titre)'}" ?`)) return;
+
+    const account = (document.getElementById('agendaAccount')?.value || '').trim();
+    if (!account) {
+        showToast('Sélectionne un compte Agenda.', 'error');
+        return;
+    }
+
+    showLoading('Suppression de l\'événement…');
+    try {
+        const r = await fetch('/api/calendar/events/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account, eventId: selectedAgendaEventId })
+        });
+        const result = await r.json();
+        if (!result.ok) {
+            showToast('Erreur: ' + esc(result.error || result.details || 'impossible de supprimer'), 'error', 5000);
+            return;
+        }
+        closeAgendaEventModal();
+        showToast('Événement supprimé.', 'success');
+        await loadAgendaWeek();
+    } catch (e) {
+        showToast('Erreur réseau: ' + e.message, 'error', 5000);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -5064,6 +5627,8 @@ document.addEventListener('keydown', (e) => {
         if (typeof closeReminderModal === 'function') closeReminderModal();
         if (typeof closeAccountsModal === 'function') closeAccountsModal();
         if (typeof closeDeleteMailModal === 'function') closeDeleteMailModal();
+        if (typeof closeAgendaCreateModal === 'function') closeAgendaCreateModal();
+        if (typeof closeAgendaEventModal === 'function') closeAgendaEventModal();
     }
     // Delete — delete selected inbox mail
     if (e.key === 'Delete' && currentTab === 'inbox' && selectedInboxId) {

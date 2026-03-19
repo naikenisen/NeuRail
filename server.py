@@ -25,7 +25,7 @@ import urllib.request
 import urllib.parse
 from urllib.parse import parse_qs, urlparse
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta
 from email import encoders
 from email import policy as email_policy
 from email.mime.base import MIMEBase
@@ -131,7 +131,7 @@ os.makedirs(OBSIDIAN_ATT_DIR, exist_ok=True)
 
 # In-memory OAuth state store (state -> metadata) for current server process.
 GOOGLE_OAUTH_PENDING = {}
-GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
 GOOGLE_MAIL_SCOPE = "https://mail.google.com/"
 
 logging.basicConfig(
@@ -436,18 +436,31 @@ def pick_google_oauth_account(preferred_email=""):
     return accounts[0] if accounts else None
 
 
-def list_google_calendar_events(account_email, year, month):
-    """Fetch Google Calendar events for a given month."""
-    start = datetime(year, month, 1)
-    if month == 12:
-        end = datetime(year + 1, 1, 1)
-    else:
-        end = datetime(year, month + 1, 1)
+def map_google_calendar_event(ev):
+    """Normalize Google Calendar event payload for frontend use."""
+    start_data = ev.get("start", {}) or {}
+    end_data = ev.get("end", {}) or {}
+    start_value = start_data.get("dateTime") or start_data.get("date") or ""
+    end_value = end_data.get("dateTime") or end_data.get("date") or ""
+    return {
+        "id": ev.get("id", ""),
+        "summary": ev.get("summary", "(Sans titre)"),
+        "description": ev.get("description", "") or "",
+        "location": ev.get("location", "") or "",
+        "start": start_value,
+        "end": end_value,
+        "allDay": bool(start_data.get("date") and not start_data.get("dateTime")),
+        "htmlLink": ev.get("htmlLink", "") or "",
+        "status": ev.get("status", "") or "",
+    }
 
+
+def list_google_calendar_events(account_email, time_min_iso, time_max_iso):
+    """Fetch Google Calendar events for an arbitrary time range."""
     access_token = get_valid_gmail_access_token(account_email)
     params = {
-        "timeMin": start.strftime("%Y-%m-%dT00:00:00Z"),
-        "timeMax": end.strftime("%Y-%m-%dT00:00:00Z"),
+        "timeMin": time_min_iso,
+        "timeMax": time_max_iso,
         "singleEvents": "true",
         "orderBy": "startTime",
         "maxResults": 2500,
@@ -464,24 +477,81 @@ def list_google_calendar_events(account_email, year, month):
         payload = json.loads(resp.read())
 
     items = payload.get("items", []) if isinstance(payload, dict) else []
-    events = []
-    for ev in items:
-        start_data = ev.get("start", {}) or {}
-        end_data = ev.get("end", {}) or {}
-        start_value = start_data.get("dateTime") or start_data.get("date") or ""
-        end_value = end_data.get("dateTime") or end_data.get("date") or ""
-        events.append({
-            "id": ev.get("id", ""),
-            "summary": ev.get("summary", "(Sans titre)"),
-            "description": ev.get("description", "") or "",
-            "location": ev.get("location", "") or "",
-            "start": start_value,
-            "end": end_value,
-            "allDay": bool(start_data.get("date") and not start_data.get("dateTime")),
-            "htmlLink": ev.get("htmlLink", "") or "",
-            "status": ev.get("status", "") or "",
-        })
-    return events
+    return [map_google_calendar_event(ev) for ev in items]
+
+
+def create_google_calendar_event(account_email, payload):
+    """Create an event in the primary Google Calendar."""
+    access_token = get_valid_gmail_access_token(account_email)
+    summary = (payload.get("summary", "") or "").strip()
+    if not summary:
+        raise RuntimeError("Le titre (summary) est requis.")
+
+    all_day = bool(payload.get("allDay"))
+    event_data = {
+        "summary": summary,
+        "description": (payload.get("description", "") or "").strip(),
+        "location": (payload.get("location", "") or "").strip(),
+    }
+
+    if all_day:
+        start_date = (payload.get("startDate", "") or "").strip()
+        end_date = (payload.get("endDate", "") or "").strip()
+        if not start_date:
+            raise RuntimeError("Date de début requise pour un événement journée entière.")
+
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            if end_date:
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            else:
+                end_dt = start_dt + timedelta(days=1)
+            if end_dt <= start_dt:
+                end_dt = start_dt + timedelta(days=1)
+        except ValueError:
+            raise RuntimeError("Format de date invalide (AAAA-MM-JJ attendu).")
+
+        event_data["start"] = {"date": start_dt.strftime("%Y-%m-%d")}
+        event_data["end"] = {"date": end_dt.strftime("%Y-%m-%d")}
+    else:
+        start_dt_iso = (payload.get("startDateTime", "") or "").strip()
+        end_dt_iso = (payload.get("endDateTime", "") or "").strip()
+        if not start_dt_iso or not end_dt_iso:
+            raise RuntimeError("Dates/horaires de début et fin requis.")
+
+        event_data["start"] = {"dateTime": start_dt_iso}
+        event_data["end"] = {"dateTime": end_dt_iso}
+
+    body = json.dumps(event_data).encode("utf-8")
+    req = urllib.request.Request(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        created = json.loads(resp.read())
+    return map_google_calendar_event(created)
+
+
+def delete_google_calendar_event(account_email, event_id):
+    """Delete an event from the primary Google Calendar."""
+    access_token = get_valid_gmail_access_token(account_email)
+    event_id = (event_id or "").strip()
+    if not event_id:
+        raise RuntimeError("eventId requis.")
+
+    url = "https://www.googleapis.com/calendar/v3/calendars/primary/events/" + urllib.parse.quote(event_id, safe="")
+    req = urllib.request.Request(
+        url,
+        method="DELETE",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(req, timeout=25):
+        return True
 
 
 def parse_google_error_payload(body_text):
@@ -1673,24 +1743,50 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 qs = parse_qs(urlparse(self.path).query)
                 year_raw = (qs.get("year", [""])[0] or "").strip()
                 month_raw = (qs.get("month", [""])[0] or "").strip()
+                start_raw = (qs.get("start", [""])[0] or "").strip()
+                end_raw = (qs.get("end", [""])[0] or "").strip()
                 account_email = (qs.get("account", [""])[0] or "").strip()
 
                 now = datetime.now()
                 year = int(year_raw) if year_raw.isdigit() else now.year
                 month = int(month_raw) if month_raw.isdigit() else now.month
-                if month < 1 or month > 12:
-                    return self._json({"error": "Mois invalide (1-12)."}, 400)
+
+                if start_raw and end_raw:
+                    try:
+                        start_dt = datetime.strptime(start_raw, "%Y-%m-%d")
+                        end_dt = datetime.strptime(end_raw, "%Y-%m-%d")
+                    except ValueError:
+                        return self._json({"error": "Format start/end invalide (AAAA-MM-JJ attendu)."}, 400)
+
+                    if end_dt <= start_dt:
+                        return self._json({"error": "La date de fin doit être après la date de début."}, 400)
+
+                    time_min_iso = start_dt.strftime("%Y-%m-%dT00:00:00Z")
+                    time_max_iso = end_dt.strftime("%Y-%m-%dT00:00:00Z")
+                else:
+                    if month < 1 or month > 12:
+                        return self._json({"error": "Mois invalide (1-12)."}, 400)
+
+                    start_dt = datetime(year, month, 1)
+                    if month == 12:
+                        end_dt = datetime(year + 1, 1, 1)
+                    else:
+                        end_dt = datetime(year, month + 1, 1)
+                    time_min_iso = start_dt.strftime("%Y-%m-%dT00:00:00Z")
+                    time_max_iso = end_dt.strftime("%Y-%m-%dT00:00:00Z")
 
                 account = pick_google_oauth_account(account_email)
                 if not account:
                     return self._json({"error": "Aucun compte Google OAuth disponible."}, 404)
 
-                events = list_google_calendar_events(account.get("email", ""), year, month)
+                events = list_google_calendar_events(account.get("email", ""), time_min_iso, time_max_iso)
                 return self._json({
                     "ok": True,
                     "account": account.get("email", ""),
                     "year": year,
                     "month": month,
+                    "start": start_dt.strftime("%Y-%m-%d"),
+                    "end": end_dt.strftime("%Y-%m-%d"),
                     "events": events,
                 })
             except urllib.error.HTTPError as e:
@@ -1933,6 +2029,52 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 save_accounts(accounts)
 
                 return self._json({"ok": True, "auth_url": auth_url})
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        # ── Google Calendar events CRUD ──
+        if self.path == "/api/calendar/events":
+            try:
+                account_email = (data.get("account", "") or "").strip()
+                account = pick_google_oauth_account(account_email)
+                if not account:
+                    return self._json({"error": "Aucun compte Google OAuth disponible."}, 404)
+
+                created = create_google_calendar_event(account.get("email", ""), data)
+                return self._json({"ok": True, "event": created})
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", errors="replace")
+                info = parse_google_error_payload(body)
+                return self._json({
+                    "ok": False,
+                    "error_code": "CALENDAR_HTTP_ERROR",
+                    "error": f"Google Calendar HTTP {e.code}",
+                    "details": info.get("message", body),
+                }, 502)
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/calendar/events/delete":
+            try:
+                account_email = (data.get("account", "") or "").strip()
+                event_id = (data.get("eventId", "") or "").strip()
+                account = pick_google_oauth_account(account_email)
+                if not account:
+                    return self._json({"error": "Aucun compte Google OAuth disponible."}, 404)
+                if not event_id:
+                    return self._json({"error": "eventId requis."}, 400)
+
+                delete_google_calendar_event(account.get("email", ""), event_id)
+                return self._json({"ok": True})
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", errors="replace")
+                info = parse_google_error_payload(body)
+                return self._json({
+                    "ok": False,
+                    "error_code": "CALENDAR_HTTP_ERROR",
+                    "error": f"Google Calendar HTTP {e.code}",
+                    "details": info.get("message", body),
+                }, 502)
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 
