@@ -237,8 +237,13 @@ def ai_generate_reminder(payload):
     return json.loads(content.strip())
 
 
-def build_eml(from_addr, to_addr, subject, body_text):
-    msg = MIMEText(body_text, "plain", "utf-8")
+def build_eml(from_addr, to_addr, subject, body_text, html_body=None):
+    if html_body:
+        msg = MIMEMultipart("alternative")
+        msg.attach(MIMEText(body_text, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+    else:
+        msg = MIMEText(body_text, "plain", "utf-8")
     msg["From"] = from_addr
     msg["To"] = to_addr
     msg["Subject"] = subject
@@ -246,8 +251,8 @@ def build_eml(from_addr, to_addr, subject, body_text):
     return msg.as_string()
 
 
-def save_eml_to_downloads(from_addr, to_addr, subject, body_text):
-    eml_content = build_eml(from_addr, to_addr, subject, body_text)
+def save_eml_to_downloads(from_addr, to_addr, subject, body_text, html_body=None):
+    eml_content = build_eml(from_addr, to_addr, subject, body_text, html_body=html_body)
     safe_subject = "".join(c for c in subject if c.isalnum() or c in " _-").strip()[:80] or "mail"
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_subject}_{ts}.eml"
@@ -1377,9 +1382,10 @@ def _autoconfig_fallback(domain, email_addr):
 # ═══════════════════════════════════════════════════════
 #  SMTP Send
 # ═══════════════════════════════════════════════════════
-def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=None):
+def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=None, html_body=None):
     """Send email via SMTP using account config. Also saves .eml locally.
     attachments: list of dicts with keys: filename, content_type, data (base64-encoded)
+    html_body: optional HTML version of the email body (e.g. body + HTML signature)
     """
     account = normalize_auth_fields(account)
     smtp_server = account.get("smtp_server", "")
@@ -1391,7 +1397,7 @@ def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=Non
     from_addr = account.get("email", username)
     auth_type = account.get("auth_type", "password")
 
-    msg = MIMEMultipart()
+    msg = MIMEMultipart("mixed")  # 'mixed' supports both text/html alternatives and file attachments
     msg["From"] = from_addr
     msg["To"] = to_addr
     msg["Subject"] = subject
@@ -1399,7 +1405,13 @@ def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=Non
     msg["Message-ID"] = f"<{hashlib.md5((from_addr + to_addr + subject + str(time.time())).encode()).hexdigest()}@isenapp>"
     if cc:
         msg["Cc"] = cc
-    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    if html_body:
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(body_text, "plain", "utf-8"))
+        alt.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(alt)
+    else:
+        msg.attach(MIMEText(body_text, "plain", "utf-8"))
 
     # Attach files
     if attachments:
@@ -2167,7 +2179,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     data.get("from", ""),
                     data.get("to", ""),
                     data.get("subject", ""),
-                    data.get("body", "")
+                    data.get("body", ""),
+                    html_body=data.get("html_body", None)
                 )
                 return self._json({"ok": True, "path": filepath})
             except Exception as e:
@@ -2364,10 +2377,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 body = data.get("body", "")
                 cc = data.get("cc", "")
                 attachments = data.get("attachments", None)
+                html_body = data.get("html_body", None)
                 account = find_account_by_email(from_addr)
                 if not account:
                     return self._json({"error": f"Aucun compte configuré pour {from_addr}"}, 400)
-                send_email_smtp(account, to_addr, subject, body, cc, attachments=attachments)
+                send_email_smtp(account, to_addr, subject, body, cc, attachments=attachments, html_body=html_body)
                 return self._json({"ok": True})
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
