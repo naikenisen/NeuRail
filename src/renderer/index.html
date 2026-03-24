@@ -39,14 +39,16 @@
 <div class="container">
     <!-- Tab Bar -->
     <div class="tab-bar" id="mainTabBar">
-        <button class="tab-btn active" data-tab="todo" onclick="switchTab('todo')"><i class="icon-list-checks"></i> Todo</button>
-        <button class="tab-btn" data-tab="inbox" onclick="switchTab('inbox')"><i class="icon-inbox"></i> Inbox</button>
-        <button class="tab-btn" data-tab="mail" onclick="switchTab('mail')"><i class="icon-send"></i> Rédiger</button>
-        <button class="tab-btn" data-tab="graph" onclick="switchTab('graph')"><i class="icon-network"></i> Graph</button>
-        <button class="tab-btn" data-tab="agenda" onclick="switchTab('agenda')"><i class="icon-calendar-days"></i> Agenda</button>
-        <button class="tab-btn" data-tab="leads" onclick="switchTab('leads')"><i class="icon-users"></i> Leads</button>
-        <span id="siteTabButtons"></span>
-        <button class="tab-btn" onclick="openAddSiteModal()" title="Ajouter un site" style="color:var(--accent-blue);font-size:1.1em;padding:0.6rem 0.7rem"><i class="icon-plus"></i></button>
+        <div class="tab-bar-fixed">
+            <button class="tab-btn active" data-tab="todo" onclick="switchTab('todo')"><i class="icon-list-checks"></i> Todo</button>
+            <button class="tab-btn" data-tab="inbox" onclick="switchTab('inbox')"><i class="icon-inbox"></i> Inbox</button>
+            <button class="tab-btn" data-tab="mail" onclick="switchTab('mail')"><i class="icon-send"></i> Rédiger</button>
+            <button class="tab-btn" data-tab="graph" onclick="switchTab('graph')"><i class="icon-network"></i> Graph</button>
+            <button class="tab-btn" data-tab="agenda" onclick="switchTab('agenda')"><i class="icon-calendar-days"></i> Agenda</button>
+            <button class="tab-btn" data-tab="leads" onclick="switchTab('leads')"><i class="icon-users"></i> Leads</button>
+        </div>
+        <div class="tab-bar-scroll" id="siteTabButtons"></div>
+        <button class="tab-btn tab-btn-add-site" onclick="openAddSiteModal()" title="Ajouter un site" style="color:var(--accent-blue);font-size:1.1em;padding:0.6rem 0.7rem"><i class="icon-plus"></i></button>
     </div>
 
     <!-- TODO TAB -->

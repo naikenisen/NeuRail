@@ -4105,7 +4105,7 @@ function renderSiteTabButtons() {
         const icon = esc(t.icon || 'icon-globe');
         const label = esc(t.label || hostFromAnyUrl(t.url) || 'Site');
         const isActive = currentTab === t.id;
-        return `<button class="tab-btn ${isActive ? 'active' : ''}" data-tab="${esc(t.id)}" onclick="switchTab('${esc(t.id)}')" title="${esc(t.url)}"><i class="${icon}"></i> ${label}</button>`;
+        return `<button class="tab-btn ${isActive ? 'active' : ''}" data-tab="${esc(t.id)}" onclick="switchTab('${esc(t.id)}')" title="${esc(t.url)}"><i class="${icon}"></i><span class="tab-btn-label">${label}</span></button>`;
     }).join('');
 }
 
