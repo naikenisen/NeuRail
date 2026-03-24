@@ -2,7 +2,7 @@
 
 # 🚀 ISENAPP
 
-**Client de bureau tout-en-un : email, gestion de tâches, navigateur intégré et visualisation Obsidian.**
+**Client de bureau tout-en-un : email, gestion de tâches, navigateur intégré et visualisation graph.**
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)](package.json)
 [![Electron](https://img.shields.io/badge/Electron-33-47848f?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -52,7 +52,7 @@
 | **✅ Gestion de tâches** | Sections personnalisées, menu contextuel natif (compléter/supprimer), persistance JSON |
 | **🌐 Navigateur intégré** | Onglets natifs via `BrowserView`, sessions persistantes par site, popups OAuth |
 | **🔐 Coffre-fort de mots de passe** | Chiffrement au repos via `safeStorage` (keyring OS), CRUD complet, autofill sur formulaires |
-| **🗂 Visualisation Obsidian** | Scan du graphe de vault, lecture de fichiers Markdown, protocole sécurisé `vault-file://` |
+| **🗂 Visualisation graph** | Scan du graphe de vault, lecture de fichiers Markdown, protocole sécurisé `vault-file://` |
 | **🤖 Assistance IA** | Intégration Google Gemini API pour la génération et reformulation de contenu |
 | **👥 Contacts** | Import CSV, autocomplétion dans le compositeur d'emails |
 | **🎨 Thèmes** | Dark mode (Catppuccin) & Light mode, bascule instantanée |
@@ -111,7 +111,7 @@ webPreferences: {
 - **`contextIsolation: true`** — Le renderer ne peut jamais accéder aux APIs Node.js ni modifier le script preload.
 - **`sandbox: true`** — Le processus renderer tourne dans un bac à sable au niveau de l'OS.
 - **Preload script** — Seule passerelle entre Main et Renderer via `contextBridge.exposeInMainWorld()`.
-- **Protocole `vault-file://`** — Sert les fichiers du vault Obsidian sans exposer le système de fichiers.
+- **Protocole `vault-file://`** — Sert les fichiers du vault graph sans exposer le système de fichiers.
 - **Chiffrement `safeStorage`** — Les mots de passe sont chiffrés via le keyring natif de l'OS.
 
 ---
