@@ -1391,6 +1391,16 @@
                 <label>Corps du message</label>
                 <textarea id="mailBody" placeholder="Rédigez votre mail ici…"></textarea>
             </div>
+            <div class="mail-field" id="replyPromptField" style="display:none">
+                <label>Prompt Gemini (mode réponse)</label>
+                <textarea id="replyPromptInput" style="min-height:80px" placeholder="Ex: Réponse courte, ton ferme mais cordial, proposer un créneau jeudi matin."></textarea>
+                <small style="color:var(--text-muted)">Utilisé uniquement pour générer votre réponse lors d'un Répondre / Répondre à tous.</small>
+            </div>
+            <div class="mail-field" id="originalMailField" style="display:none">
+                <label>Message original (figé)</label>
+                <textarea id="originalMailBody" readonly style="min-height:180px;opacity:0.9" placeholder="Le message original s'affiche ici"></textarea>
+                <small style="color:var(--text-muted)">Ce contenu est verrouillé et n'est jamais modifié par « Reformuler ».</small>
+            </div>
             <div class="mail-field">
                 <label>Signature</label>
                 <select id="mailSignatureSelect" class="signature-select" onchange="onSignatureChange()">
@@ -1411,6 +1421,7 @@
             </div>
             <div class="mail-actions">
                 <button onclick="sendMailSMTP()" style="background:var(--accent-blue)!important;border-color:var(--accent-blue)!important;color:white!important"><i class="icon-send"></i> Envoyer</button>
+                <button class="accent-blue" id="generateReplyBtn" style="display:none" onclick="generateReplyFromPrompt()"><i class="icon-sparkles"></i> Générer réponse IA</button>
                 <button class="accent-purple" onclick="reformulateMail()"><i class="icon-sparkles"></i> Reformuler</button>
                 <button class="accent-green" onclick="saveMailEml()"><i class="icon-save"></i> Enregistrer .eml</button>
             </div>
@@ -1851,6 +1862,7 @@ let agendaInitialized = false;
 let browserInitialized = false;
 let githubInitialized = false;
 let browserEventsBound = false;
+let composerReplyContext = null;
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const esc = s => String(s)
@@ -2576,14 +2588,117 @@ async function reformulateMail() {
     }
 }
 
+function setReplyComposerContext(context) {
+    composerReplyContext = context || null;
+    const promptField = document.getElementById('replyPromptField');
+    const originalField = document.getElementById('originalMailField');
+    const originalBody = document.getElementById('originalMailBody');
+    const generateBtn = document.getElementById('generateReplyBtn');
+    const promptInput = document.getElementById('replyPromptInput');
+
+    if (composerReplyContext) {
+        if (promptField) promptField.style.display = '';
+        if (originalField) originalField.style.display = '';
+        if (generateBtn) generateBtn.style.display = '';
+        if (originalBody) originalBody.value = composerReplyContext.originalText || '';
+        if (promptInput && !promptInput.value.trim()) promptInput.value = 'Réponse professionnelle, claire et concise.';
+    } else {
+        if (promptField) promptField.style.display = 'none';
+        if (originalField) originalField.style.display = 'none';
+        if (generateBtn) generateBtn.style.display = 'none';
+        if (originalBody) originalBody.value = '';
+        if (promptInput) promptInput.value = '';
+    }
+}
+
+function getQuotedOriginalText(context = composerReplyContext) {
+    if (!context || !context.originalText) return '';
+    return '\n\n--- Le ' + (context.date || '') + ', ' + (context.from || '') + ' a écrit :\n' + context.originalText;
+}
+
+function getComposerFinalBodyText() {
+    const draft = document.getElementById('mailBody').value.trim();
+    if (!composerReplyContext) return draft;
+    return (draft + getQuotedOriginalText()).trim();
+}
+
+function buildHtmlBodyWithOptionalQuote(bodyText, signatureHtml, quoteText) {
+    const escapedBody = String(bodyText || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+    const escapedQuote = String(quoteText || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+    const quoteBlock = escapedQuote
+        ? '<blockquote style="margin:1em 0 0.6em;padding:0.7em 0.9em;border-left:3px solid #9ca3af;background:#f7f7f7;color:#374151">' + escapedQuote + '</blockquote>'
+        : '';
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' +
+        '<p style="white-space:pre-wrap;font-family:Arial,sans-serif;margin:0 0 1em">' + escapedBody + '</p>' +
+        quoteBlock +
+        '<hr style="border:none;border-top:1px solid #ccc;margin:1em 0">' +
+        signatureHtml +
+        '</body></html>';
+}
+
+async function generateReplyFromPrompt() {
+    if (!composerReplyContext) {
+        showToast('Ce mode est disponible uniquement en réponse à un mail.', 'error');
+        return;
+    }
+    if (!state.settings.geminiKey) {
+        showToast('Configure ta cle API Gemini dans l\'onglet Rédiger.', 'error', 3000);
+        document.getElementById('geminiKeyInput')?.focus();
+        return;
+    }
+    const prompt = (document.getElementById('replyPromptInput')?.value || '').trim();
+    if (!prompt) {
+        showToast('Ajoute un prompt Gemini pour orienter la réponse.', 'error');
+        document.getElementById('replyPromptInput')?.focus();
+        return;
+    }
+
+    showLoading('Génération de la réponse avec Gemini…');
+    try {
+        const r = await fetch('/api/generate-reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: state.settings.geminiKey,
+                prompt,
+                subject: document.getElementById('mailSubject').value.trim(),
+                from: composerReplyContext.from || '',
+                original_text: composerReplyContext.originalText || '',
+                draft: document.getElementById('mailBody').value.trim()
+            })
+        });
+        const result = await r.json();
+        if (result.error) {
+            showToast('Erreur IA : ' + result.error, 'error', 5000);
+        } else if (result.text) {
+            document.getElementById('mailBody').value = result.text.trim();
+            showToast('Réponse générée.', 'success');
+        }
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 5000);
+    } finally {
+        hideLoading();
+    }
+}
+
 async function saveMailEml() {
     const from = document.getElementById('mailFrom').value;
     const to = getMailToValue();
     const subject = document.getElementById('mailSubject').value.trim();
-    const body = document.getElementById('mailBody').value.trim();
+    const body = getComposerFinalBodyText();
     if (!to || !subject) { showToast('Remplis le(s) destinataire(s) et le sujet.', 'error'); return; }
     const signatureHtml = getActiveSignatureHtml();
-    const html_body = signatureHtml ? buildHtmlBody(body, signatureHtml) : null;
+    const html_body = signatureHtml
+        ? buildHtmlBodyWithOptionalQuote(document.getElementById('mailBody').value.trim(), signatureHtml, getQuotedOriginalText())
+        : null;
     try {
         const r = await fetch('/api/save-eml', {
             method: 'POST',
@@ -2856,6 +2971,7 @@ function selectMailForCompose(sid, tid) {
     if (!t) return;
 
     selectedMailTask = { sid, tid };
+    setReplyComposerContext(null);
 
     mailRecipients = t.mailTo ? t.mailTo.split(',').map(e => e.trim()).filter(Boolean) : [];
     renderMailTags();
@@ -2875,6 +2991,7 @@ function selectMailForCompose(sid, tid) {
 
 function deselectMailTask() {
     selectedMailTask = null;
+    setReplyComposerContext(null);
     mailRecipients = [];
     mailCcRecipients = [];
     renderMailTags();
@@ -3758,6 +3875,9 @@ function replyToMail(mailId, replyAll) {
     const mail = inboxMails.find(m => m.id === mailId);
     if (!mail) return;
     switchTab('mail');
+    selectedMailTask = null;
+    updateMailComposerState();
+    renderMailList();
     // Pre-fill composer
     mailRecipients = mail.from_email ? [mail.from_email] : [];
     mailCcRecipients = [];
@@ -3778,8 +3898,12 @@ function replyToMail(mailId, replyAll) {
     renderMailTags();
     renderCcTags();
     document.getElementById('mailSubject').value = 'Re: ' + (mail.subject || '').replace(/^Re:\s*/i, '');
-    const quotedBody = '\n\n--- Le ' + (mail.date || '') + ', ' + (mail.from_name || mail.from_email || '') + ' a écrit :\n' + (mail.body || '');
-    document.getElementById('mailBody').value = quotedBody;
+    document.getElementById('mailBody').value = '';
+    setReplyComposerContext({
+        originalText: mail.body || '',
+        date: mail.date || '',
+        from: mail.from_name || mail.from_email || ''
+    });
     // Try to match account
     const fromSel = document.getElementById('mailFrom');
     if (mail.account) {
@@ -3794,6 +3918,10 @@ function forwardMail(mailId) {
     const mail = inboxMails.find(m => m.id === mailId);
     if (!mail) return;
     switchTab('mail');
+    selectedMailTask = null;
+    updateMailComposerState();
+    renderMailList();
+    setReplyComposerContext(null);
     mailRecipients = [];
     mailCcRecipients = [];
     renderMailTags();
@@ -4265,7 +4393,7 @@ async function sendMailSMTP() {
     const to = getMailToValue();
     const cc = getMailCcValue();
     const subject = document.getElementById('mailSubject').value.trim();
-    const body = document.getElementById('mailBody').value.trim();
+    const body = getComposerFinalBodyText();
     if (!from) { showToast('Configure d\'abord un compte expéditeur.', 'error'); return; }
     if (!to || !subject) { showToast('Remplis le(s) destinataire(s) et le sujet.', 'error'); return; }
 
@@ -4276,7 +4404,9 @@ async function sendMailSMTP() {
     const attachments = await prepareAttachmentsForSend();
 
     const signatureHtml = getActiveSignatureHtml();
-    const html_body = signatureHtml ? buildHtmlBody(body, signatureHtml) : null;
+    const html_body = signatureHtml
+        ? buildHtmlBodyWithOptionalQuote(document.getElementById('mailBody').value.trim(), signatureHtml, getQuotedOriginalText())
+        : null;
 
     showLoading('Envoi du mail via SMTP…');
     try {
@@ -4296,6 +4426,7 @@ async function sendMailSMTP() {
                 renderMailTab();
                 render();
             }
+            setReplyComposerContext(null);
         } else {
             showToast('Erreur : ' + (result.error || 'Erreur'), 'error', 5000);
         }

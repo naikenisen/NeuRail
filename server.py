@@ -237,6 +237,31 @@ def ai_generate_reminder(payload):
     return json.loads(content.strip())
 
 
+def ai_generate_reply(payload):
+    token = payload.get("token", "")
+    user_prompt = payload.get("prompt", "")
+    subject = payload.get("subject", "")
+    sender = payload.get("from", "")
+    original_text = payload.get("original_text", "")
+    draft = payload.get("draft", "")
+
+    prompt = (
+        "Tu es un assistant de redaction email professionnel en francais. "
+        "Genere UNIQUEMENT le texte de reponse (sans objet, sans salutation imposee, sans commentaire). "
+        "Respecte strictement les instructions utilisateur ci-dessous. "
+        "N'inclus pas le message original dans la sortie.\n\n"
+        f"Sujet du fil : {subject}\n"
+        f"Expediteur original : {sender}\n\n"
+        "Instructions utilisateur :\n"
+        f"{user_prompt}\n\n"
+        "Brouillon actuel (a ameliorer si present) :\n"
+        f"{draft}\n\n"
+        "Message original recu (contexte, NE PAS recopier integralement) :\n"
+        f"{original_text}"
+    )
+    return ai_call(token, prompt)
+
+
 def build_eml(from_addr, to_addr, subject, body_text, html_body=None):
     if html_body:
         msg = MIMEMultipart("alternative")
@@ -2192,6 +2217,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:
                 result = ai_generate_reminder(data)
                 return self._json({"ok": True, "reminder": result})
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/generate-reply":
+            try:
+                text = ai_generate_reply(data)
+                return self._json({"ok": True, "text": text})
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 
