@@ -592,7 +592,7 @@
         /* ─── Timeline ──────────────────────────────── */
         .timeline-container {
             background: var(--bg-surface); border: 1px solid var(--card-border); border-radius: var(--radius-md);
-            margin-bottom: 1rem; overflow: hidden;
+            margin-bottom: 1rem; overflow: visible;
         }
         .timeline-header {
             display: flex; justify-content: space-between; align-items: center;
@@ -606,7 +606,7 @@
             transition: all 0.15s;
         }
         .timeline-nav button:hover { border-color: var(--accent-blue); color: var(--text); }
-        .timeline-scroll { overflow-x: auto; padding: 1.5rem 1rem 1rem; }
+        .timeline-scroll { overflow-x: auto; padding: 9rem 1rem 1rem; }
         .timeline-track {
             display: flex; position: relative; min-width: max-content; padding-bottom: 0.5rem;
         }
