@@ -1489,6 +1489,38 @@ function showTimelinePopover(evt, dateStr) {
     dot.parentElement.style.position = 'relative';
     dot.parentElement.appendChild(popover);
 
+    const scroll = dot.closest('.timeline-scroll');
+    if (scroll) {
+        const margin = 10;
+        let popRect = popover.getBoundingClientRect();
+        const scrollRect = scroll.getBoundingClientRect();
+
+        // If the popover is clipped at the top, render it below the dot instead.
+        if (popRect.top < scrollRect.top + margin) {
+            popover.classList.add('below');
+            popRect = popover.getBoundingClientRect();
+        }
+
+        // Keep the popover fully visible vertically within the timeline viewport.
+        if (popRect.bottom > scrollRect.bottom - margin) {
+            scroll.scrollTop += popRect.bottom - (scrollRect.bottom - margin);
+            popRect = popover.getBoundingClientRect();
+        }
+        if (popRect.top < scrollRect.top + margin) {
+            scroll.scrollTop -= (scrollRect.top + margin) - popRect.top;
+            popRect = popover.getBoundingClientRect();
+        }
+
+        // Keep the popover visible horizontally as well.
+        if (popRect.right > scrollRect.right - margin) {
+            scroll.scrollLeft += popRect.right - (scrollRect.right - margin);
+            popRect = popover.getBoundingClientRect();
+        }
+        if (popRect.left < scrollRect.left + margin) {
+            scroll.scrollLeft -= (scrollRect.left + margin) - popRect.left;
+        }
+    }
+
     setTimeout(() => {
         const close = (ev) => {
             if (!popover.contains(ev.target) && ev.target !== dot) {
