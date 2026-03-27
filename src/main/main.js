@@ -173,7 +173,7 @@ function createWindow() {
     height: winState.height,
     minWidth: 800,
     minHeight: 550,
-    title: 'ISENAPP',
+    title: 'NeuRail',
     icon: resourcePath(app, 'assets', 'logo.svg'),
     frame: false,
     transparent: false,
@@ -707,7 +707,7 @@ app.whenReady().then(async () => {
   } catch (e) {
     backendLastError = backendLastError || e.message;
     console.error(e.message);
-    dialog.showErrorBox('ISENAPP - Erreur de démarrage', buildBackendFailureMessage());
+    dialog.showErrorBox('NeuRail - Erreur de démarrage', buildBackendFailureMessage());
     app.quit();
     return;
   }

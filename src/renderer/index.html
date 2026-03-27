@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ISENAPP</title>
+    <title>NeuRail</title>
     <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
     <link rel="shortcut icon" href="/assets/logo.svg">
     <link rel="apple-touch-icon" href="/assets/logo.svg">
@@ -18,9 +18,12 @@
 
 <!-- ─── Custom Titlebar ────────────────────────── -->
 <div class="titlebar" id="titlebar">
-    <span class="titlebar-icon"><img src="/assets/logo.svg" alt="ISENAPP"></span>
-    <span class="titlebar-title">ISENAPP</span>
+    <span class="titlebar-icon"><img src="/assets/logo.svg" alt="NeuRail"></span>
+    <span class="titlebar-title">NeuRail</span>
     <div class="titlebar-controls">
+        <button class="titlebar-btn titlebar-settings" id="btn-settings" onclick="openSettings()" title="Paramètres">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
         <button class="titlebar-btn" id="btn-minimize" title="Réduire">
             <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -180,21 +183,7 @@
         <div class="mail-composer" style="margin-top:0.8rem">
             <h2><i class="icon-settings"></i> Outils Rédiger</h2>
             <div class="mail-field">
-                <label>Clé API Gemini</label>
-                <input type="password" id="geminiKeyInput" placeholder="AIza...">
-                <small style="color:var(--text-muted)">Utilisée pour « Reformuler ».</small>
-            </div>
-            <div class="mail-actions" style="margin-bottom:0.8rem">
-                <button onclick="saveMailToolsSettings()"><i class="icon-save"></i> Sauvegarder la clé</button>
-            </div>
-            <div class="mail-field">
-                <label>📇 Importer un annuaire de contacts (CSV)</label>
-                <small style="display:block;margin-bottom:0.4rem;color:var(--text-muted)">Colonnes: Display Name, First Name, Last Name, Primary Email</small>
-                <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
-                    <input type="file" id="contactsCsvInput" accept=".csv" style="font-size:0.8rem;color:var(--text)">
-                    <button onclick="importContactsCsv()" style="white-space:nowrap;padding:0.35rem 0.8rem;background:var(--accent-green);color:white;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:0.78rem">📥 Importer</button>
-                </div>
-                <small id="contactsCount" style="color:var(--text-muted);margin-top:0.3rem;display:block"></small>
+                <small style="color:var(--text-muted)"><i class="icon-info"></i> La clé API Gemini et l'import de contacts sont configurables dans les <a href="#" onclick="openSettings();return false;" style="color:var(--accent-blue)">Paramètres <i class="icon-settings" style="font-size:0.75rem"></i></a>.</small>
             </div>
             <div class="mail-field" style="margin-top:0.8rem">
                 <label>✍️ Signatures HTML</label>
@@ -562,10 +551,73 @@
 
 <!-- Settings Modal -->
 <div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
-    <div class="modal">
+    <div class="modal settings-modal">
         <h2><i class="icon-settings"></i> Paramètres</h2>
-        <p style="color:var(--text-muted);margin-bottom:0.8rem">Les réglages Gemini et import annuaire sont dans l'onglet <strong>Rédiger</strong>.</p>
-        <div class="modal-actions">
+
+        <!-- Section: Apparence -->
+        <div class="settings-section">
+            <div class="settings-section-header" onclick="toggleSettingsSection('settings-appearance')">
+                <span><i class="icon-palette"></i> Apparence</span>
+                <i class="icon-chevron-down settings-chevron" id="chevron-appearance"></i>
+            </div>
+            <div class="settings-section-body" id="settings-appearance">
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <strong>Thème de l'interface</strong>
+                        <small>Basculer entre le mode sombre et le mode clair</small>
+                    </div>
+                    <button onclick="toggleThemeMode()" id="themeToggleBtn" class="settings-theme-btn">
+                        <i class="icon-sun"></i> Mode clair
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Intelligence Artificielle -->
+        <div class="settings-section">
+            <div class="settings-section-header" onclick="toggleSettingsSection('settings-ai')">
+                <span><i class="icon-sparkles"></i> Intelligence Artificielle</span>
+                <i class="icon-chevron-down settings-chevron" id="chevron-ai"></i>
+            </div>
+            <div class="settings-section-body" id="settings-ai">
+                <div class="settings-row column">
+                    <label class="settings-label">Clé API Gemini</label>
+                    <input type="password" id="geminiKeyInput" placeholder="AIza..." class="settings-input">
+                    <small>Utilisée pour reformuler et générer des réponses IA.</small>
+                </div>
+                <div class="settings-row" style="margin-top:0.6rem">
+                    <button onclick="saveMailToolsSettings()"><i class="icon-save"></i> Sauvegarder la clé</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Messagerie -->
+        <div class="settings-section">
+            <div class="settings-section-header" onclick="toggleSettingsSection('settings-mail')">
+                <span><i class="icon-mail"></i> Messagerie</span>
+                <i class="icon-chevron-down settings-chevron" id="chevron-mail"></i>
+            </div>
+            <div class="settings-section-body" id="settings-mail">
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <strong>Comptes mail</strong>
+                        <small>POP3, IMAP, SMTP, Gmail OAuth 2.0</small>
+                    </div>
+                    <button onclick="openAccountsModal();closeSettings()"><i class="icon-user"></i> Gérer les comptes</button>
+                </div>
+                <div class="settings-row column" style="margin-top:0.9rem">
+                    <label class="settings-label">📇 Importer un annuaire de contacts (CSV)</label>
+                    <small>Colonnes: Display Name, First Name, Last Name, Primary Email</small>
+                    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.4rem">
+                        <input type="file" id="contactsCsvInput" accept=".csv" style="font-size:0.8rem;color:var(--text)">
+                        <button onclick="importContactsCsv()">📥 Importer</button>
+                    </div>
+                    <small id="contactsCount" style="color:var(--text-muted);margin-top:0.3rem;display:block"></small>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:1rem">
             <button onclick="closeSettings()">Fermer</button>
         </div>
     </div>
