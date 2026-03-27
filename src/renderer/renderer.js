@@ -153,7 +153,6 @@ function renderHeader() {
             <button onclick="toggleEdit()" class="${editMode ? 'active' : ''}">
                 ${editMode ? '<i class="icon-check"></i> Terminer' : '<i class="icon-pencil"></i> Éditer'}
             </button>
-            <button onclick="toggleThemeMode()" id="themeToggleBtn"><i class="icon-sun"></i> White mode</button>
         </div>
     </header>`;
 }
@@ -514,9 +513,18 @@ function closeSettings() {
     document.getElementById('settingsModal').classList.remove('show');
 }
 
+function toggleSettingsSection(id) {
+    const body = document.getElementById(id);
+    const sectionKey = id.replace('settings-', '');
+    const chevron = document.getElementById('chevron-' + sectionKey);
+    if (!body) return;
+    const isOpen = body.classList.contains('open');
+    body.classList.toggle('open', !isOpen);
+    if (chevron) chevron.classList.toggle('open', !isOpen);
+}
+
 function saveSettings() {
     closeSettings();
-    showToast('Parametres deplaces vers Rédiger.', 'success');
 }
 
 function saveMailToolsSettings() {
@@ -532,8 +540,8 @@ function applyThemeMode(mode) {
     const btn = document.getElementById('themeToggleBtn');
     if (btn) {
         btn.innerHTML = normalized === 'light'
-            ? '<i class="icon-moon"></i> Dark mode'
-            : '<i class="icon-sun"></i> White mode';
+            ? '<i class="icon-moon"></i> Mode sombre'
+            : '<i class="icon-sun"></i> Mode clair';
     }
 }
 

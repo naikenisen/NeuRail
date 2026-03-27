@@ -1,7 +1,7 @@
 {
-  "name": "isenapp",
+  "name": "neurail",
   "version": "1.0.0",
-  "description": "ISENAPP — Client email Electron avec gestion de tâches, autoconfig email et visualisation Graph",
+  "description": "NeuRail — Client email Electron avec gestion de tâches, autoconfig email et visualisation Graph",
   "author": {
     "name": "Isen Naiken",
     "email": "isen.naiken@nexomedis.com"
@@ -17,8 +17,8 @@
     "build:dir": "electron-builder --linux --dir"
   },
   "build": {
-    "appId": "com.nexomedis.isenapp",
-    "productName": "ISENAPP",
+    "appId": "com.nexomedis.neurail",
+    "productName": "NeuRail",
     "directories": {
       "output": "dist"
     },

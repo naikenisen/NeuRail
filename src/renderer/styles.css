@@ -1,4 +1,4 @@
-        /* ─── ISENAPP Dark Theme ────────────── */
+        /* ─── NeuRail Dark Theme ─────────────── */
         :root {
             --bg: #1e1e2e;
             --bg-surface: #181825;
@@ -395,6 +395,57 @@
         .btn-primary { background: var(--accent-blue) !important; border-color: var(--accent-blue) !important; color: white !important; }
         .btn-primary:hover { filter: brightness(1.1); }
         .btn-danger { background: #ef4444 !important; border-color: #ef4444 !important; color: white !important; }
+
+        /* ─── Settings Modal ─────────────────────────── */
+        .settings-modal { max-width: 540px; }
+        .settings-modal h2 { margin-bottom: 1rem; }
+        .settings-section {
+            border: 1px solid var(--card-border); border-radius: var(--radius-md);
+            margin-bottom: 0.5rem; overflow: hidden;
+        }
+        .settings-section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.7rem 0.9rem; cursor: pointer; background: var(--bg-surface);
+            font-size: 0.88rem; font-weight: 600; transition: background 0.15s;
+            user-select: none; -webkit-user-select: none;
+        }
+        .settings-section-header:hover { background: var(--card-hover); }
+        .settings-section-header > span {
+            display: flex; align-items: center; gap: 0.45rem;
+        }
+        .settings-chevron { font-size: 0.85rem; transition: transform 0.2s; }
+        .settings-chevron.open { transform: rotate(180deg); }
+        .settings-section-body {
+            display: none; padding: 0.85rem 0.9rem;
+            border-top: 1px solid var(--card-border);
+            background: var(--bg);
+        }
+        .settings-section-body.open { display: block; }
+        .settings-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.6rem; flex-wrap: wrap;
+        }
+        .settings-row.column { flex-direction: column; align-items: flex-start; }
+        .settings-row-label { display: flex; flex-direction: column; gap: 0.15rem; }
+        .settings-row-label small { color: var(--text-muted); font-size: 0.76rem; }
+        .settings-label { font-size: 0.85rem; font-weight: 600; }
+        .settings-input {
+            width: 100%; padding: 0.45rem 0.7rem; border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm); background: var(--progress-bg); color: var(--text);
+            font-size: 0.85rem; font-family: inherit; margin-top: 0.35rem;
+        }
+        .settings-input:focus { outline: none; border-color: var(--accent-blue); }
+        .settings-section-body small { display: block; font-size: 0.76rem; color: var(--text-muted); margin-top: 0.3rem; }
+        .settings-theme-btn {
+            padding: 0.4rem 0.9rem; border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm); background: var(--progress-bg); color: var(--text);
+            cursor: pointer; font-size: 0.82rem; font-weight: 500;
+            display: inline-flex; align-items: center; gap: 0.35rem; transition: all 0.15s; white-space: nowrap;
+        }
+        .settings-theme-btn:hover { border-color: var(--accent-blue); color: var(--text); }
+        .settings-section-body .modal-actions { margin-top: 0; }
+        /* Titlebar settings button */
+        .titlebar-settings { color: var(--text-muted); }
 
         /* ─── Emoji Picker ───────────────────────────── */
         .emoji-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 0.3rem; max-height: 200px; overflow-y: auto; }
