@@ -152,17 +152,17 @@
         }
 
         /* ─── Layout ─────────────────────────────────── */
-        .container { max-width: min(96vw, 1320px); margin: 0 auto; }
+        .container { max-width: 100%; margin: 0 auto; }
 
         /* ─── Tabs ───────────────────────────────────── */
         .tab-bar {
             display: flex;
             align-items: stretch;
-            gap: 0;
-            margin-bottom: 1.5rem;
-            background: var(--bg-surface);
-            border-bottom: 1px solid var(--card-border);
-            overflow: hidden;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+            background: transparent;
+            border: none;
+            overflow: visible;
             min-width: 0;
         }
         .tab-bar-fixed {
@@ -190,7 +190,10 @@
             border-radius: 999px;
         }
         .tab-btn {
-            padding: 0.6rem 1.2rem; border: none; background: transparent;
+            padding: 0.5rem 0.95rem;
+            border: 1px solid var(--card-border);
+            border-radius: 999px;
+            background: var(--progress-bg);
             color: var(--text-muted); cursor: pointer; font-size: 0.82rem; font-weight: 500;
             transition: all 0.15s; text-align: center; position: relative;
             display: flex; align-items: center; gap: 0.45rem; letter-spacing: 0.01em;
@@ -210,29 +213,31 @@
             flex: 0 0 auto;
             border-left: 1px solid var(--card-border);
         }
-        .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+        .tab-btn:hover { color: var(--text); background: rgba(137,180,250,0.1); border-color: rgba(137,180,250,0.38); }
         .tab-btn.active {
             color: var(--text);
-            box-shadow: inset 0 -2px 0 var(--accent-blue);
+            background: rgba(137,180,250,0.14);
+            border-color: var(--accent-blue);
+            box-shadow: 0 8px 20px rgba(20, 28, 56, 0.28);
         }
         .tab-btn i { font-size: 14px; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
         /* ─── Header ─────────────────────────────────── */
-        header { text-align: center; margin-bottom: 1.5rem; }
+        header { text-align: left; margin-bottom: 0.85rem; }
         header h1 { font-size: 1.3rem; font-weight: 600; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.5rem; justify-content: center; }
         .header-actions {
-            display: flex; gap: 0.5rem; justify-content: center; margin-top: 0.75rem; flex-wrap: wrap;
+            display: flex; gap: 0.45rem; justify-content: flex-start; margin-top: 0; flex-wrap: wrap;
         }
         .header-actions button, .mail-actions button {
-            padding: 0.4rem 0.8rem; border: 1px solid var(--card-border); border-radius: var(--radius-sm);
-            background: transparent; color: var(--text-muted); cursor: pointer;
-            font-size: 0.8rem; font-weight: 500; transition: all 0.15s;
+            padding: 0.44rem 0.92rem; border: 1px solid var(--card-border); border-radius: 999px;
+            background: var(--progress-bg); color: var(--text-muted); cursor: pointer;
+            font-size: 0.8rem; font-weight: 600; transition: all 0.16s;
             display: inline-flex; align-items: center; gap: 0.35rem;
         }
         .header-actions button:hover, .mail-actions button:hover {
-            background: rgba(137,180,250,0.08); color: var(--text);
+            background: rgba(137,180,250,0.12); color: var(--text); border-color: rgba(137,180,250,0.4); transform: translateY(-1px);
         }
         .header-actions button.active {
             background: rgba(137,180,250,0.1); color: var(--accent-blue);
@@ -386,7 +391,7 @@
         .form-group small { display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem; }
         .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
         .modal-actions button {
-            padding: 0.45rem 1rem; border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+            padding: 0.45rem 1rem; border: 1px solid var(--card-border); border-radius: 999px;
             background: var(--progress-bg); color: var(--text-muted); cursor: pointer;
             font-size: 0.8rem; font-weight: 500; transition: all 0.15s;
             display: inline-flex; align-items: center; gap: 0.3rem;
@@ -840,7 +845,29 @@
             border: 1px solid var(--card-border);
             border-radius: var(--radius-md);
             overflow: hidden;
-            min-height: 460px;
+            min-height: 0;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        #tab-agenda.active {
+            height: calc(100vh - 126px);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+        #tab-agenda header { margin-bottom: 0.45rem; }
+        #tab-agenda .agenda-cal-filters { margin-bottom: 0.45rem; }
+        #tab-agenda .global-progress {
+            margin-bottom: 0.45rem;
+            padding: 0.65rem 0.9rem;
+        }
+        #tab-agenda #agendaEvents {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
         .agenda-week-header {
             display: grid;
@@ -849,9 +876,9 @@
             background: rgba(255,255,255,0.02);
         }
         .agenda-week-header .day {
-            padding: 0.65rem 0.45rem;
+            padding: 0.45rem 0.35rem;
             text-align: center;
-            font-size: 0.74rem;
+            font-size: 0.71rem;
             border-left: 1px solid var(--card-border);
             color: var(--text-muted);
             font-weight: 600;
@@ -868,7 +895,7 @@
         .agenda-all-day-row {
             display: grid;
             grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
-            min-height: 56px;
+            min-height: 42px;
             border-bottom: 1px solid var(--card-border);
         }
         .agenda-all-day-label,
@@ -887,38 +914,38 @@
             display: flex;
             flex-direction: column;
             gap: 0.22rem;
-            min-height: 56px;
+            min-height: 42px;
         }
         .agenda-week-grid-wrap {
-            overflow: auto;
-            max-height: calc(100vh - 300px);
+            overflow: hidden;
+            flex: 1;
+            min-height: 0;
         }
         .agenda-time-grid {
             display: grid;
             grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
             position: relative;
-            min-height: 1180px;
+            height: 100%;
         }
         .agenda-hours-column {
             border-right: 1px solid var(--card-border);
             background: rgba(0,0,0,0.15);
+            display: flex;
+            flex-direction: column;
         }
         .agenda-hour-slot {
-            height: 48px;
+            flex: 1;
             border-bottom: 1px solid rgba(255,255,255,0.03);
-            font-size: 0.68rem;
+            font-size: 0.64rem;
             color: var(--text-muted);
             display: flex;
             align-items: flex-start;
             justify-content: center;
-            padding-top: 0.2rem;
+            padding-top: 0.12rem;
         }
         .agenda-day-column {
             border-left: 1px solid var(--card-border);
             position: relative;
-            background-image: linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
-            background-size: 100% 48px;
-            min-height: 1152px;
         }
         .agenda-day-column.today {
             background-color: rgba(137,180,250,0.05);

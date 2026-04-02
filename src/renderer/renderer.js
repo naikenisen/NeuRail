@@ -4127,7 +4127,11 @@ function renderAgendaWeek(events) {
         return `<div class="agenda-all-day-cell">${cards}</div>`;
     }).join('');
 
-    const hours = Array.from({ length: 14 }, (_, i) => i + 8);
+    const visibleStartMin = 8 * 60;
+    const visibleHours = 14;
+    const pxPerHour = 32;
+    const visibleEndMin = visibleStartMin + (visibleHours * 60);
+    const hours = Array.from({ length: visibleHours }, (_, i) => i + 8);
     const hoursHtml = hours.map((h) => `<div class="agenda-hour-slot">${String(h).padStart(2, '0')}:00</div>`).join('');
 
     const dayColumns = weekDays.map((day) => {
@@ -4135,9 +4139,12 @@ function renderAgendaWeek(events) {
         const cls = key === todayYmd ? 'agenda-day-column today' : 'agenda-day-column';
         const segments = (timedByDay[key] || []).sort((a, b) => a.startMin - b.startMin);
         const eventsHtml = segments.map((segment) => {
+            const displayStart = Math.max(segment.startMin, visibleStartMin);
+            const displayEnd = Math.min(segment.endMin, visibleEndMin);
+            if (displayEnd <= displayStart) return '';
             const k = encodeURIComponent(agendaEventKey(segment.event));
-            const top = Math.max(0, ((segment.startMin - 480) / 60) * 48);
-            const duration = Math.max(18, ((segment.endMin - segment.startMin) / 60) * 48);
+            const top = Math.max(0, ((displayStart - visibleStartMin) / 60) * pxPerHour);
+            const duration = Math.max(14, ((displayEnd - displayStart) / 60) * pxPerHour);
             const startLabel = `${String(Math.floor(segment.startMin / 60)).padStart(2, '0')}:${String(segment.startMin % 60).padStart(2, '0')}`;
             const endLabel = `${String(Math.floor(segment.endMin / 60)).padStart(2, '0')}:${String(segment.endMin % 60).padStart(2, '0')}`;
             const bg = hexToRgba(segment.event.calendarColor || '#6c8aff', 0.2);
@@ -4177,7 +4184,15 @@ function renderAgendaWeek(events) {
 function bindAgendaInteractions() {
     const cards = document.querySelectorAll('.agenda-event-card.timed:not(.readonly)');
     const dayColumns = [...document.querySelectorAll('.agenda-day-column')];
-    const pxQuarter = 12;
+    const visibleStartMin = 8 * 60;
+    const visibleHours = 14;
+    const totalMinutes = visibleHours * 60;
+    const visibleEndMin = visibleStartMin + totalMinutes;
+
+    function getGridHeight() {
+        const col = document.querySelector('.agenda-day-column');
+        return col ? col.offsetHeight : 448;
+    }
 
     cards.forEach((card) => {
         card.onmousedown = (evt) => {
@@ -4192,6 +4207,7 @@ function bindAgendaInteractions() {
             const ev = findAgendaEventByKey(key);
             if (!ev || !ev.canEdit) return;
 
+            const gridH = getGridHeight();
             agendaInteractionState = {
                 mode,
                 card,
@@ -4199,10 +4215,12 @@ function bindAgendaInteractions() {
                 sourceDayKey: dayCol.dataset.dayKey,
                 targetDayKey: dayCol.dataset.dayKey,
                 startY: evt.clientY,
-                originalTop: parseFloat(card.style.top || '0') || 0,
-                originalHeight: parseFloat(card.style.height || '24') || 24,
+                originalTop: card.offsetTop,
+                originalHeight: card.offsetHeight,
                 changed: false,
             };
+            card.style.top = `${card.offsetTop}px`;
+            card.style.height = `${card.offsetHeight}px`;
             card.classList.add(mode === 'move' ? 'dragging' : 'resizing');
             evt.preventDefault();
         };
@@ -4212,11 +4230,12 @@ function bindAgendaInteractions() {
         const s = agendaInteractionState;
         if (!s) return;
         const dy = evt.clientY - s.startY;
-        const gridMax = 24 * 48;
+        const gridH = getGridHeight();
+        const pxQuarter = gridH / (visibleHours * 4);
 
         if (s.mode === 'move') {
             let top = s.originalTop + dy;
-            top = Math.max(0, Math.min(gridMax - s.originalHeight, Math.round(top / pxQuarter) * pxQuarter));
+            top = Math.max(0, Math.min(gridH - s.originalHeight, Math.round(top / pxQuarter) * pxQuarter));
             if (Math.abs(top - s.originalTop) > 0.1) s.changed = true;
             s.card.style.top = `${top}px`;
 
@@ -4236,14 +4255,14 @@ function bindAgendaInteractions() {
                 top = s.originalTop + (s.originalHeight - pxQuarter);
             }
             top = Math.max(0, Math.round(top / pxQuarter) * pxQuarter);
-            height = Math.min(gridMax - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
+            height = Math.min(gridH - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
             if (Math.abs(top - s.originalTop) > 0.1 || Math.abs(height - s.originalHeight) > 0.1) s.changed = true;
             s.card.style.top = `${top}px`;
             s.card.style.height = `${height}px`;
         } else {
             let height = s.originalHeight + dy;
             const top = parseFloat(s.card.style.top || '0') || 0;
-            height = Math.min(gridMax - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
+            height = Math.min(gridH - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
             if (Math.abs(height - s.originalHeight) > 0.1) s.changed = true;
             s.card.style.height = `${height}px`;
         }
@@ -4255,10 +4274,12 @@ function bindAgendaInteractions() {
         dayColumns.forEach((c) => c.classList.remove('drag-target'));
         s.card.classList.remove('dragging', 'resizing');
 
+        const gridH = getGridHeight();
+        const pxQuarter = gridH / (visibleHours * 4);
         const top = parseFloat(s.card.style.top || '0') || 0;
         const height = parseFloat(s.card.style.height || '24') || 24;
-        const startMin = Math.max(0, Math.min(24 * 60 - 15, Math.round(top / pxQuarter) * 15));
-        const endMin = Math.min(24 * 60, startMin + Math.max(15, Math.round(height / pxQuarter) * 15));
+        const startMin = Math.max(visibleStartMin, Math.min(visibleEndMin - 15, visibleStartMin + (Math.round(top / pxQuarter) * 15)));
+        const endMin = Math.min(visibleEndMin, startMin + Math.max(15, Math.round(height / pxQuarter) * 15));
         const dayKey = s.targetDayKey || s.sourceDayKey;
         const changed = s.changed;
         const key = s.key;
