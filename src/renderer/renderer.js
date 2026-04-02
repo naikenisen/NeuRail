@@ -3596,6 +3596,18 @@ function sitePartitionForTabId(tabId) {
     return `persist:site-tab-${slug}`;
 }
 
+const DEFAULT_SITE_TABS = [
+    { id: 'site-default-evento', label: 'Evento', url: 'https://evento.renater.fr/', icon: 'icon-calendar-days' },
+    { id: 'site-default-filesender', label: 'FileSender', url: 'https://filesender.renater.fr/', icon: 'icon-send' },
+    { id: 'site-default-renavisio', label: 'RenaVisio', url: 'https://rendez-vous.renater.fr/home/renavisio', icon: 'icon-video' },
+    { id: 'site-default-github', label: 'GitHub', url: 'https://github.com/', icon: 'icon-github' },
+    { id: 'site-default-gemini', label: 'Gemini', url: 'https://gemini.google.com/app', icon: 'icon-sparkles' },
+];
+
+function buildDefaultSiteTabs() {
+    return normalizeSiteTabs(DEFAULT_SITE_TABS);
+}
+
 /* ── Persistence ──────────────────────────────── */
 function normalizeSiteTabs(input) {
     if (!Array.isArray(input)) return [];
@@ -3635,7 +3647,7 @@ function loadSiteTabs() {
 
     try {
         const raw = localStorage.getItem(SITE_TABS_STORAGE_KEY);
-        if (!raw) return [];
+        if (!raw) return buildDefaultSiteTabs();
         const parsed = JSON.parse(raw);
         const normalized = normalizeSiteTabs(parsed);
 
@@ -3648,7 +3660,7 @@ function loadSiteTabs() {
 
         return normalized;
     } catch {
-        return [];
+        return buildDefaultSiteTabs();
     }
 }
 
