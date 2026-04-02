@@ -2811,6 +2811,9 @@ setInterval(() => {
 (async function init() {
     await Promise.all([loadState(), loadContacts()]);
 
+    // Restore custom site tabs from persisted app state (with legacy migration).
+    initSiteTabs();
+
     // Security migration: never keep GitHub password in plain JSON state.
     if (state.settings && Object.prototype.hasOwnProperty.call(state.settings, 'githubPassword')) {
         delete state.settings.githubPassword;
@@ -3594,27 +3597,56 @@ function sitePartitionForTabId(tabId) {
 }
 
 /* ── Persistence ──────────────────────────────── */
+function normalizeSiteTabs(input) {
+    if (!Array.isArray(input)) return [];
+    return input
+        .filter(t => t && t.id && t.url)
+        .map(t => ({
+            id: String(t.id),
+            label: String(t.label || hostFromAnyUrl(t.url) || 'Site'),
+            url: ensureUrlWithScheme(t.url),
+            icon: String(t.icon || 'icon-globe'),
+            partition: (typeof t.partition === 'string' && t.partition.trim())
+                ? t.partition.trim()
+                : sitePartitionForTabId(t.id),
+        }));
+}
+
 function saveSiteTabs() {
+    siteTabs = normalizeSiteTabs(siteTabs);
+    if (!state.settings) state.settings = {};
+    state.settings.siteTabs = siteTabs;
+    autoSave();
+
+    // Keep legacy localStorage mirror for backward compatibility.
     try {
         localStorage.setItem(SITE_TABS_STORAGE_KEY, JSON.stringify(siteTabs));
     } catch {}
 }
 
 function loadSiteTabs() {
+    const fromState = normalizeSiteTabs(state?.settings?.siteTabs);
+    if (fromState.length) {
+        try {
+            localStorage.setItem(SITE_TABS_STORAGE_KEY, JSON.stringify(fromState));
+        } catch {}
+        return fromState;
+    }
+
     try {
         const raw = localStorage.getItem(SITE_TABS_STORAGE_KEY);
         if (!raw) return [];
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed)
-            ? parsed
-                .filter(t => t && t.id && t.url)
-                .map(t => ({
-                    ...t,
-                    partition: (typeof t.partition === 'string' && t.partition.trim())
-                        ? t.partition.trim()
-                        : sitePartitionForTabId(t.id),
-                }))
-            : [];
+        const normalized = normalizeSiteTabs(parsed);
+
+        // One-time migration localStorage -> persisted backend app state.
+        if (normalized.length) {
+            if (!state.settings) state.settings = {};
+            state.settings.siteTabs = normalized;
+            autoSave();
+        }
+
+        return normalized;
     } catch {
         return [];
     }
