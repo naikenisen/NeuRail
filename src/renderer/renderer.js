@@ -20,6 +20,7 @@ let selectedAgendaEventId = null;
 let siteTabs = [];          // [{id, label, url, icon}]
 let siteTabsInitialized = {};  // {siteTabId: true} — tracks which BrowserViews are created
 let browserEventsBound = false;
+let siteTabCredentialState = {};  // {siteTabId: {hasCredentials, credentialId, hasLoginForm}}
 const SITE_TABS_STORAGE_KEY = 'site-tabs-v2';
 let agendaInitialized = false;
 let composerReplyContext = null;
@@ -61,6 +62,7 @@ function switchTab(tab) {
     if (isSiteTab) {
         document.getElementById('tab-site').classList.add('active');
         initSiteTabView(tab);
+        updateSiteTabCredentialUI();
     } else {
         const el = document.getElementById('tab-' + tab);
         if (el) el.classList.add('active');
@@ -3874,9 +3876,140 @@ function bindBrowserEventsIfNeeded() {
             const addr = document.getElementById('siteTabAddress');
             if (addr && typeof payload.url === 'string') addr.value = payload.url;
         }
+        // Track credential state
+        if (typeof payload.hasCredentials === 'boolean' || typeof payload.hasLoginForm === 'boolean') {
+            if (!siteTabCredentialState[tabId]) siteTabCredentialState[tabId] = {};
+            if (typeof payload.hasCredentials === 'boolean') {
+                siteTabCredentialState[tabId].hasCredentials = payload.hasCredentials;
+                siteTabCredentialState[tabId].credentialId = payload.credentialId || null;
+            }
+            if (typeof payload.hasLoginForm === 'boolean') {
+                siteTabCredentialState[tabId].hasLoginForm = payload.hasLoginForm;
+            }
+            if (tabId === currentTab) updateSiteTabCredentialUI();
+        }
     });
     browserEventsBound = true;
 }
+
+/* ── Credential UI helpers ────────────────────── */
+function updateSiteTabCredentialUI() {
+    const tabState = siteTabCredentialState[currentTab] || {};
+    const autofillBtn = document.getElementById('siteTabAutofillBtn');
+    const saveBtn = document.getElementById('siteTabSaveCredentialBtn');
+    if (autofillBtn) {
+        autofillBtn.style.display = (tabState.hasCredentials && tabState.hasLoginForm) ? '' : 'none';
+    }
+    if (saveBtn) {
+        saveBtn.style.display = tabState.hasLoginForm ? '' : 'none';
+    }
+}
+
+async function siteTabAutofill() {
+    const api = getBrowserApi();
+    if (!api || !api.browserAutofillSavedCredential) return;
+    const tabState = siteTabCredentialState[currentTab] || {};
+    if (!tabState.credentialId) {
+        showToast('Aucun identifiant sauvegardé pour ce site.', 'error');
+        return;
+    }
+    const result = await api.browserAutofillSavedCredential({ tabId: currentTab, credentialId: tabState.credentialId });
+    if (result && result.ok) {
+        showToast('Identifiants remplis !', 'success');
+    } else {
+        showToast('Échec du remplissage : ' + (result?.error || 'erreur inconnue'), 'error', 3000);
+    }
+}
+
+function openSaveCredentialModal() {
+    const addr = document.getElementById('siteTabAddress');
+    const currentUrl = addr ? addr.value : '';
+    document.getElementById('credentialSaveOrigin').value = currentUrl;
+    document.getElementById('credentialSaveUsername').value = '';
+    document.getElementById('credentialSavePassword').value = '';
+    document.getElementById('credentialSaveModal').classList.add('show');
+    syncBrowserVisibilityForUiState();
+}
+
+function closeSaveCredentialModal() {
+    document.getElementById('credentialSaveModal').classList.remove('show');
+    syncBrowserVisibilityForUiState();
+}
+
+async function confirmSaveCredential() {
+    const api = getBrowserApi();
+    if (!api || !api.passwordVaultUpsert) return;
+    const origin = document.getElementById('credentialSaveOrigin').value;
+    const username = document.getElementById('credentialSaveUsername').value.trim();
+    const password = document.getElementById('credentialSavePassword').value;
+    const label = (getSiteTab(currentTab)?.label || '').trim();
+    if (!username || !password) {
+        showToast('Identifiant et mot de passe requis.', 'error');
+        return;
+    }
+    const result = await api.passwordVaultUpsert({ origin, username, password, label });
+    if (result && result.ok) {
+        showToast('Identifiants sauvegardés avec chiffrement.', 'success');
+        closeSaveCredentialModal();
+        // Update credential state for the current tab
+        if (!siteTabCredentialState[currentTab]) siteTabCredentialState[currentTab] = {};
+        siteTabCredentialState[currentTab].hasCredentials = true;
+        siteTabCredentialState[currentTab].credentialId = result.entryId || null;
+        updateSiteTabCredentialUI();
+    } else {
+        showToast('Erreur : ' + (result?.error || 'Échec de la sauvegarde'), 'error', 4000);
+    }
+}
+
+async function openManageCredentialsModal() {
+    const api = getBrowserApi();
+    if (!api || !api.passwordVaultList) return;
+    const result = await api.passwordVaultList();
+    const entries = (result && result.ok && Array.isArray(result.entries)) ? result.entries : [];
+    const list = document.getElementById('credentialManagerList');
+    if (!list) return;
+    if (!entries.length) {
+        list.innerHTML = '<p class="credentials-empty">Aucun identifiant sauvegardé.</p>';
+    } else {
+        list.innerHTML = entries.map(e => `
+            <div class="credential-item" data-cid="${esc(e.id)}">
+                <div class="credential-item-info">
+                    <strong>${esc(e.origin)}</strong>
+                    <span>${esc(e.label || e.origin)}</span>
+                    <small>${esc(e.username)}</small>
+                </div>
+                <button class="credential-item-delete" onclick="deleteCredential('${esc(e.id)}')" title="Supprimer"><i class="icon-trash-2"></i></button>
+            </div>
+        `).join('');
+    }
+    document.getElementById('credentialManagerModal').classList.add('show');
+}
+
+function closeManageCredentialsModal() {
+    document.getElementById('credentialManagerModal').classList.remove('show');
+}
+
+async function deleteCredential(credentialId) {
+    const api = getBrowserApi();
+    if (!api || !api.passwordVaultDelete) return;
+    if (!confirm('Supprimer cet identifiant ?')) return;
+    const result = await api.passwordVaultDelete(credentialId);
+    if (result && result.ok) {
+        showToast('Identifiant supprimé.', 'success');
+        // Reset credential state for any tab using this credential
+        Object.keys(siteTabCredentialState).forEach(tabId => {
+            if (siteTabCredentialState[tabId].credentialId === credentialId) {
+                siteTabCredentialState[tabId].hasCredentials = false;
+                siteTabCredentialState[tabId].credentialId = null;
+            }
+        });
+        updateSiteTabCredentialUI();
+        openManageCredentialsModal(); // refresh
+    } else {
+        showToast('Erreur : ' + (result?.error || 'Échec'), 'error', 3000);
+    }
+}
+
 
 let siteModalVisibilityObserverStarted = false;
 function initSiteModalVisibilityBridge() {
@@ -4775,6 +4908,8 @@ document.addEventListener('keydown', (e) => {
         if (typeof closeDeleteMailModal === 'function') closeDeleteMailModal();
         if (typeof closeAgendaCreateModal === 'function') closeAgendaCreateModal();
         if (typeof closeAgendaEventModal === 'function') closeAgendaEventModal();
+        closeSaveCredentialModal();
+        closeManageCredentialsModal();
     }
     // Delete — delete selected inbox mail
     if (e.key === 'Delete' && currentTab === 'inbox' && selectedInboxId) {

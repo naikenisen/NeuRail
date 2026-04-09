@@ -223,6 +223,8 @@
                 <button onclick="siteTabReload()"><i class="icon-refresh-cw"></i></button>
                 <input id="siteTabAddress" class="site-tab-address" type="text" placeholder="https://example.com" onkeydown="if(event.key==='Enter')siteTabNavigateAddress()">
                 <button onclick="siteTabNavigateAddress()"><i class="icon-arrow-right"></i></button>
+                <button id="siteTabAutofillBtn" onclick="siteTabAutofill()" title="Remplir automatiquement les identifiants sauvegardés" style="display:none"><i class="icon-key-round"></i></button>
+                <button id="siteTabSaveCredentialBtn" onclick="openSaveCredentialModal()" title="Sauvegarder les identifiants pour ce site" style="display:none"><i class="icon-shield-plus"></i></button>
                 <button onclick="openEditSiteModal()" title="Modifier ce site"><i class="icon-settings"></i></button>
                 <button class="site-tab-remove-btn" onclick="removeSiteTab(currentTab)" title="Supprimer cet onglet"><i class="icon-trash-2"></i></button>
             </div>
@@ -257,6 +259,41 @@
             <div class="modal-actions">
                 <button onclick="closeSiteTabModal()">Annuler</button>
                 <button class="btn-primary" onclick="saveSiteTabFromModal()"><i class="icon-save"></i> Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal : Sauvegarder les identifiants -->
+    <div class="modal-overlay" id="credentialSaveModal" onclick="if(event.target===this)closeSaveCredentialModal()">
+        <div class="modal modal-w-420">
+            <h2><i class="icon-shield-plus"></i> Sauvegarder les identifiants</h2>
+            <div class="form-group">
+                <label>Site</label>
+                <input type="text" id="credentialSaveOrigin" placeholder="https://example.com">
+            </div>
+            <div class="form-group">
+                <label>Identifiant / Email</label>
+                <input type="text" id="credentialSaveUsername" placeholder="votre@email.com" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>Mot de passe</label>
+                <input type="password" id="credentialSavePassword" placeholder="••••••••" autocomplete="current-password">
+            </div>
+            <p class="site-tab-session-note"><i class="icon-lock"></i> Le mot de passe est chiffré avec le trousseau système et ne quitte jamais l'application.</p>
+            <div class="modal-actions">
+                <button onclick="closeSaveCredentialModal()">Annuler</button>
+                <button class="btn-primary" onclick="confirmSaveCredential()"><i class="icon-save"></i> Sauvegarder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal : Gérer les identifiants sauvegardés -->
+    <div class="modal-overlay" id="credentialManagerModal" onclick="if(event.target===this)closeManageCredentialsModal()">
+        <div class="modal modal-w-500">
+            <h2><i class="icon-key-round"></i> Identifiants sauvegardés</h2>
+            <div id="credentialManagerList" class="credential-manager-list"></div>
+            <div class="modal-actions">
+                <button onclick="closeManageCredentialsModal()">Fermer</button>
             </div>
         </div>
     </div>
@@ -403,6 +440,23 @@
                         <button onclick="importContactsCsv()">Importer</button>
                     </div>
                     <small id="contactsCount" class="contacts-count"></small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Identifiants -->
+        <div class="settings-section">
+            <div class="settings-section-header" onclick="toggleSettingsSection('settings-credentials')">
+                <span><i class="icon-key-round"></i> Identifiants sauvegardés</span>
+                <i class="icon-chevron-down settings-chevron" id="chevron-credentials"></i>
+            </div>
+            <div class="settings-section-body" id="settings-credentials">
+                <div class="settings-row">
+                    <div class="settings-row-label">
+                        <strong>Mots de passe des onglets</strong>
+                        <small>Identifiants chiffrés pour GitHub, Google, ENT et autres sites</small>
+                    </div>
+                    <button onclick="openManageCredentialsModal();closeSettings()"><i class="icon-key-round"></i> Gérer les identifiants</button>
                 </div>
             </div>
         </div>

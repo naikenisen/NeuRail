@@ -5,7 +5,7 @@ const net = require('net');
 const fs = require('fs');
 const windowStateKeeper = require('electron-window-state');
 const { resourcePath, resourceDir } = require('./lib/resource-paths');
-const { registerPasswordVaultIpcHandlers } = require('./lib/password-vault');
+const { registerPasswordVaultIpcHandlers, normalizeCredentialOrigin, readVaultRaw, autofillLoginFormScript } = require('./lib/password-vault');
 const { handleVaultFileRequest, registerVaultGraphIpcHandlers } = require('./lib/vault-graph');
 
 /* GPU tile-memory fix — prevents "tile memory limits exceeded" on large SVG graphs */
@@ -26,6 +26,17 @@ let browserVisible = false;
 let activeBrowserTabId = null;
 let browserBounds = { x: 0, y: 0, width: 0, height: 0 };
 const browserViews = new Map();
+
+/* Decrypt a vault secret using safeStorage (available after app ready) */
+function decryptVaultSecretMain(cipherB64) {
+  try {
+    if (!safeStorage || !safeStorage.isEncryptionAvailable()) return '';
+    const plain = safeStorage.decryptString(Buffer.from(String(cipherB64 || ''), 'base64'));
+    return String(plain || '');
+  } catch {
+    return '';
+  }
+}
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -351,15 +362,45 @@ function ensureBrowserViewTab(tabId, initialUrl, partition) {
   view.webContents.on('did-start-loading', () => {
     emitBrowserTabUpdate(tabId, { loading: true });
   });
-  view.webContents.on('did-stop-loading', () => {
+  view.webContents.on('did-stop-loading', async () => {
     const nav = getNavigationState(view.webContents);
+    const url = view.webContents.getURL();
     emitBrowserTabUpdate(tabId, {
       loading: false,
-      url: view.webContents.getURL(),
+      url,
       title: view.webContents.getTitle(),
       canGoBack: nav.canGoBack,
       canGoForward: nav.canGoForward,
     });
+
+    // Check for saved credentials and login form, then auto-fill if possible
+    try {
+      const origin = normalizeCredentialOrigin(url);
+      if (!origin) return;
+      const vault = readVaultRaw(app);
+      const found = vault.entries.find((e) => e.origin === origin) || null;
+
+      const hasLoginForm = await view.webContents
+        .executeJavaScript(`!!document.querySelector('input[type="password"]')`, true)
+        .catch(() => false);
+
+      emitBrowserTabUpdate(tabId, {
+        hasCredentials: !!found,
+        credentialId: found ? found.id : null,
+        hasLoginForm: !!hasLoginForm,
+      });
+
+      // Auto-fill when credentials are saved and a login form is present
+      if (found && hasLoginForm) {
+        try {
+          const username = decryptVaultSecretMain(found.usernameEnc);
+          const password = decryptVaultSecretMain(found.passwordEnc);
+          if (username && password) {
+            await view.webContents.executeJavaScript(autofillLoginFormScript(username, password), true);
+          }
+        } catch {}
+      }
+    } catch {}
   });
   view.webContents.on('did-navigate', (_event, url) => {
     const nav = getNavigationState(view.webContents);
