@@ -23,11 +23,8 @@ let browserEventsBound = false;
 const SITE_TABS_STORAGE_KEY = 'site-tabs-v2';
 let agendaInitialized = false;
 let composerReplyContext = null;
-let leadsActiveProjectId = null;
 let leadsFilter = 'all';
-let leadsEditingId = null;
-let leadsEditingProjectId = null;
-let leadsTeamFilterMemberId = null;
+let respondedMailsExpanded = false;
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const esc = s => String(s)
@@ -72,7 +69,6 @@ function switchTab(tab) {
     if (tab === 'inbox') loadInbox();
     if (tab === 'graph') initGraphIfNeeded();
     if (tab === 'agenda') initAgendaIfNeeded();
-    if (tab === 'leads') renderLeads();
     updateSiteTabViewVisibility();
 }
 
@@ -148,7 +144,6 @@ function render() {
 function renderHeader() {
     return `
     <header>
-        <h1><i class="icon-list-checks"></i> Plan d'action</h1>
         <div class="header-actions">
             <button onclick="toggleEdit()" class="${editMode ? 'active' : ''}">
                 ${editMode ? '<i class="icon-check"></i> Terminer' : '<i class="icon-pencil"></i> Éditer'}
@@ -193,7 +188,7 @@ function renderSections() {
         <div class="section" data-color="${esc(s.color)}" data-sid="${s.id}">
             <div class="section-header" onclick="onSectionClick('${s.id}')">
                 <span class="section-title">
-                    ${s.emoji} ${esc(s.title)}
+                    ${esc(s.title)}
                     <span class="section-badge">${esc(s.badge || '')}</span>
                 </span>
                 <div class="section-header-right">
@@ -431,8 +426,8 @@ function setupDragDrop() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   Section Modal (create / edit + emoji picker)
-   ═══════════════════════════════════════════════════════ */
+    Section Modal (create / edit)
+    ═══════════════════════════════════════════════════════ */
 function openSectionModal(sid) {
     editingSectionId = sid || null;
     const s = sid ? state.sections.find(x => x.id === sid) : null;
@@ -442,10 +437,9 @@ function openSectionModal(sid) {
     document.getElementById('sectionBadgeInput').value = s ? (s.badge || '') : '';
     document.getElementById('sectionDescInput').value = s ? (s.description || '') : '';
 
-    modalEmoji = s ? s.emoji : '📋';
+    modalEmoji = '';
     modalColor = s ? s.color : 'blue';
 
-    renderEmojiGrid();
     renderColorPicker();
     document.getElementById('sectionModal').classList.add('show');
 }
@@ -456,7 +450,9 @@ function closeSectionModal() {
 }
 
 function renderEmojiGrid() {
-    document.getElementById('emojiGrid').innerHTML = EMOJIS.map((e, i) =>
+    const grid = document.getElementById('emojiGrid');
+    if (!grid) return;
+    grid.innerHTML = EMOJIS.map((e, i) =>
         `<button type="button" class="emoji-btn ${e === modalEmoji ? 'selected' : ''}"
             onclick="selectEmoji(${i})">${e}</button>`
     ).join('');
@@ -489,11 +485,11 @@ function saveSectionModal() {
         const s = state.sections.find(x => x.id === editingSectionId);
         if (s) {
             s.title = title; s.badge = badge; s.description = desc;
-            s.emoji = modalEmoji; s.color = modalColor;
+            s.emoji = ''; s.color = modalColor;
         }
     } else {
         state.sections.push({
-            id: uid(), emoji: modalEmoji, title, badge, color: modalColor,
+            id: uid(), emoji: '', title, badge, color: modalColor,
             description: desc, collapsed: false, tasks: []
         });
     }
@@ -956,15 +952,15 @@ function renderSignaturesList() {
     if (!el) return;
     const sigs = state.settings.signatures || [];
     if (!sigs.length) {
-        el.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;margin:0.3rem 0">Aucune signature configurée.</p>';
+        el.innerHTML = '<p class="signatures-empty">Aucune signature configurée.</p>';
         return;
     }
     el.innerHTML = sigs.map(s =>
-        `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--card-border)">` +
-        `<span style="font-size:0.88rem">${esc(s.name)}</span>` +
-        `<div style="display:flex;gap:0.4rem">` +
-        `<button onclick="openSignatureModal('${s.id}')" style="padding:0.2rem 0.5rem;font-size:0.75rem"><i class="icon-pencil"></i></button>` +
-        `<button onclick="deleteSignature('${s.id}')" style="padding:0.2rem 0.5rem;font-size:0.75rem;background:var(--accent-red)!important;border-color:var(--accent-red)!important;color:white!important"><i class="icon-trash-2"></i></button>` +
+        `<div class="signature-item">` +
+        `<div class="signature-item-name">${esc(s.name)}</div>` +
+        `<div class="signature-item-actions">` +
+        `<button class="signature-action-edit" onclick="openSignatureModal('${s.id}')"><i class="icon-pencil"></i> Modifier</button>` +
+        `<button class="signature-action-delete" onclick="deleteSignature('${s.id}')" title="Supprimer la signature"><i class="icon-trash-2"></i></button>` +
         `</div></div>`
     ).join('');
 }
@@ -1078,7 +1074,6 @@ function getMailStatusLabel(status) {
    Mail Tab — Main Render
    ═══════════════════════════════════════════════════════ */
 function renderMailTab() {
-    renderTimeline();
     renderMailList();
     updateMailComposerState();
     updateMailBadge();
@@ -1103,20 +1098,27 @@ function renderMailList() {
     const responded = mails.filter(m => m.respondedAt);
 
     let html = '<h2><i class="icon-mail"></i> Mails à traiter</h2>';
-    if (pending.length) html += renderMailGroup('À envoyer', pending);
-    if (waiting.length) html += renderMailGroup('En attente de réponse', waiting);
-    if (responded.length) html += renderMailGroup('Terminés', responded);
+    if (pending.length) html += renderMailGroup('À envoyer', pending, true);
+    if (waiting.length) html += renderMailGroup('En attente de réponse', waiting, true);
+    if (responded.length) html += renderMailGroup('Terminés', responded, respondedMailsExpanded, 'terminated');
 
     container.innerHTML = html;
 }
 
-function renderMailGroup(title, mails) {
-    let html = `<div class="mail-group-label">${esc(title)}</div>`;
-    html += mails.map(m => {
+function renderMailGroup(title, mails, isExpanded = true, groupType = null) {
+    const hasToggle = groupType === 'terminated';
+    const toggleBtn = hasToggle ? `<button onclick="event.stopPropagation();toggleRespondedMailsVisibility()" class="mail-group-toggle" title="${respondedMailsExpanded ? 'Replier' : 'Déplier'}"><i class="icon-chevron-${respondedMailsExpanded ? 'down' : 'right'}"></i></button>` : '';
+    let html = `<div class="mail-group-label">${toggleBtn}<span>${esc(title)}</span></div>`;
+    
+    const itemsHtml = mails.map(m => {
         const status = getMailTaskStatus(m);
         const statusLabel = getMailStatusLabel(status);
         const isSelected = selectedMailTask && selectedMailTask.tid === m.id;
-        const cls = ['mail-item', isSelected ? 'selected' : '', m.sentAt ? 'is-sent' : ''].filter(Boolean).join(' ');
+        
+        // Check if mail is over 3 days old
+        const isOverThreeDays = m.sentAt && !m.respondedAt && (Date.now() - m.sentAt) > 3 * 24 * 60 * 60 * 1000;
+        
+        const cls = ['mail-item', isSelected ? 'selected' : '', m.sentAt ? 'is-sent' : '', isOverThreeDays ? 'awaiting-response-over-3days' : ''].filter(Boolean).join(' ');
         const checkDone = m.sentAt ? 'done' : '';
 
         let actionsHtml = '';
@@ -1137,7 +1139,19 @@ function renderMailGroup(title, mails) {
             <div class="mail-item-actions">${actionsHtml}</div>
         </div>`;
     }).join('');
+    
+    if (!isExpanded && hasToggle) {
+        html += `<div class="mail-group-items-hidden">${itemsHtml}</div>`;
+    } else {
+        html += itemsHtml;
+    }
+    
     return html;
+}
+
+function toggleRespondedMailsVisibility() {
+    respondedMailsExpanded = !respondedMailsExpanded;
+    renderMailList();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2685,9 +2699,10 @@ function renderAttachmentList() {
     placeholder.style.display = 'none';
     list.innerHTML = pendingAttachments.map((a, i) => {
         const sizeKB = (a.file.size / 1024).toFixed(1);
-        return `<span style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--bg-surface);border:1px solid var(--card-border);border-radius:var(--radius-sm);padding:0.15rem 0.5rem;font-size:0.75rem;color:var(--text)">
-            📎 ${esc(a.name)} <span style="color:var(--text-muted)">(${sizeKB} Ko)</span>
-            <button onclick="event.stopPropagation();removeAttachment(${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.85rem;padding:0 0.15rem">&times;</button>
+        return `<span class="attachment-chip">
+            <span class="attachment-chip-name">${esc(a.name)}</span>
+            <span class="attachment-chip-size">(${sizeKB} Ko)</span>
+            <button class="attachment-chip-remove" onclick="event.stopPropagation();removeAttachment(${i})">&times;</button>
         </span>`;
     }).join('');
 }
@@ -2796,6 +2811,9 @@ setInterval(() => {
 (async function init() {
     await Promise.all([loadState(), loadContacts()]);
 
+    // Restore custom site tabs from persisted app state (with legacy migration).
+    initSiteTabs();
+
     // Security migration: never keep GitHub password in plain JSON state.
     if (state.settings && Object.prototype.hasOwnProperty.call(state.settings, 'githubPassword')) {
         delete state.settings.githubPassword;
@@ -2806,13 +2824,6 @@ setInterval(() => {
     applyThemeMode(state.settings.uiTheme || 'dark');
 
     const geminiInput = document.getElementById('geminiKeyInput');
-    const contactsCount = document.getElementById('contactsCount');
-
-    if (geminiInput) geminiInput.value = state.settings.geminiKey || '';
-    if (contactsCount) contactsCount.textContent = contacts.length ? `${contacts.length} contacts chargés` : '';
-
-    initSiteTabs();
-    initLeadsState();
 
     renderSignaturesList();
     updateSignatureSelectors();
@@ -3553,544 +3564,6 @@ function graphFit() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   Leads — CRM léger avec SMS, rappels, hiérarchie
-   ═══════════════════════════════════════════════════════ */
-const LEAD_STATUSES = {
-    new:         { label: 'Nouveau',   color: 'new' },
-    contacted:   { label: 'Contacté',  color: 'contacted' },
-    interested:  { label: 'Intéressé', color: 'interested' },
-    negotiation: { label: 'En négo',   color: 'negotiation' },
-    won:         { label: 'Gagné',     color: 'won' },
-    lost:        { label: 'Perdu',     color: 'lost' },
-};
-
-function initLeadsState() {
-    if (!state.leads) state.leads = { projects: [], team: [] };
-    if (!state.leads.projects) state.leads.projects = [];
-    if (!state.leads.team) state.leads.team = [];
-}
-
-function getLeadsProjects() { return state.leads.projects; }
-function getLeadsTeam() { return state.leads.team; }
-function getLeadsProject(pid) { return getLeadsProjects().find(p => p.id === pid) || null; }
-function getProjectLeads(pid) { const p = getLeadsProject(pid); return p ? (p.leads || []) : []; }
-
-/* ── Render orchestrator ──────────────────────── */
-function renderLeads() {
-    initLeadsState();
-    renderLeadsProjectList();
-    renderLeadsTeamTree();
-    renderLeadsTable();
-    checkLeadReminders();
-}
-
-/* ── Sidebar: project list ────────────────────── */
-function renderLeadsProjectList() {
-    const list = document.getElementById('leadsProjectList');
-    if (!list) return;
-    const searchVal = (document.getElementById('leadsProjectSearch')?.value || '').toLowerCase();
-    const projects = getLeadsProjects().filter(p => !searchVal || (p.name || '').toLowerCase().includes(searchVal));
-
-    if (!projects.length) {
-        list.innerHTML = '<div style="padding:1rem;color:var(--text-muted);font-size:0.8rem;text-align:center">Aucun projet. Clique sur « Nouveau projet ».</div>';
-        return;
-    }
-    list.innerHTML = projects.map(p => {
-        const count = (p.leads || []).length;
-        const isActive = leadsActiveProjectId === p.id;
-        return `<div class="leads-project-item ${isActive ? 'active' : ''}" onclick="selectLeadsProject('${esc(p.id)}')">
-            <span class="lp-name">${esc(p.emoji || '📁')} ${esc(p.name)}</span>
-            <span class="lp-count">${count}</span>
-        </div>`;
-    }).join('');
-}
-
-function selectLeadsProject(pid) {
-    leadsActiveProjectId = pid;
-    leadsTeamFilterMemberId = null;
-    renderLeadsProjectList();
-    renderLeadsTable();
-}
-
-/* ── Sidebar: team tree ───────────────────────── */
-function renderLeadsTeamTree() {
-    const tree = document.getElementById('leadsTeamTree');
-    if (!tree) return;
-    const team = getLeadsTeam();
-    if (!team.length) {
-        tree.innerHTML = '<div style="padding:0.3rem 0;font-size:0.78rem;color:var(--text-muted)">Aucun membre. Ajoute via « Equipe ».</div>';
-        return;
-    }
-    const roots = team.filter(m => !m.parentId);
-    let html = '';
-    function renderNode(member, depth) {
-        const indent = depth * 16;
-        const isActive = leadsTeamFilterMemberId === member.id;
-        const roleBadge = member.role !== 'member' ? ` <span class="lead-role-badge ${esc(member.role)}">${esc(member.role === 'manager' ? 'Responsable' : 'Chef')}</span>` : '';
-        const assignedCount = countLeadsAssignedTo(member.id);
-        html += `<div class="leads-team-node ${isActive ? 'active' : ''}" onclick="filterLeadsByTeamMember('${esc(member.id)}')" title="Filtrer par ${esc(member.name)}">
-            <span class="team-indent" style="width:${indent}px"></span>
-            <span style="flex:1">${esc(member.name)}${roleBadge}</span>
-            <span style="font-size:0.7rem;color:var(--text-muted)">${assignedCount}</span>
-        </div>`;
-        const children = team.filter(m => m.parentId === member.id);
-        children.forEach(c => renderNode(c, depth + 1));
-    }
-    roots.forEach(r => renderNode(r, 0));
-    tree.innerHTML = html;
-}
-
-function countLeadsAssignedTo(memberId) {
-    let count = 0;
-    getLeadsProjects().forEach(p => {
-        (p.leads || []).forEach(l => { if (l.assigneeId === memberId) count++; });
-    });
-    return count;
-}
-
-function filterLeadsByTeamMember(memberId) {
-    leadsTeamFilterMemberId = leadsTeamFilterMemberId === memberId ? null : memberId;
-    renderLeadsTeamTree();
-    renderLeadsTable();
-}
-
-/* ── Main: leads table ────────────────────────── */
-function renderLeadsTable() {
-    const wrap = document.getElementById('leadsTableWrap');
-    const empty = document.getElementById('leadsEmptyState');
-    const titleEl = document.getElementById('leadsMainTitle');
-    if (!wrap) return;
-
-    const project = getLeadsProject(leadsActiveProjectId);
-    if (!project) {
-        wrap.innerHTML = '';
-        if (empty) { wrap.appendChild(empty); empty.style.display = ''; }
-        if (titleEl) titleEl.innerHTML = '<i class="icon-users"></i> Sélectionne un projet';
-        return;
-    }
-
-    if (titleEl) titleEl.innerHTML = `<i class="icon-folder"></i> ${esc(project.emoji || '📁')} ${esc(project.name)}`;
-
-    let leads = (project.leads || []).slice();
-    const search = (document.getElementById('leadsSearch')?.value || '').toLowerCase();
-    if (search) {
-        leads = leads.filter(l =>
-            (l.firstName || '').toLowerCase().includes(search) ||
-            (l.lastName || '').toLowerCase().includes(search) ||
-            (l.company || '').toLowerCase().includes(search) ||
-            (l.email || '').toLowerCase().includes(search) ||
-            (l.phone || '').toLowerCase().includes(search)
-        );
-    }
-    if (leadsFilter !== 'all') leads = leads.filter(l => l.status === leadsFilter);
-    if (leadsTeamFilterMemberId) leads = leads.filter(l => l.assigneeId === leadsTeamFilterMemberId);
-
-    if (!leads.length) {
-        wrap.innerHTML = '<div class="leads-empty"><i class="icon-users"></i><p>Aucun lead' + (leadsFilter !== 'all' ? ' avec ce filtre' : '') + '</p></div>';
-        return;
-    }
-
-    const now = Date.now();
-    const team = getLeadsTeam();
-    let html = `<table class="leads-table"><thead><tr>
-        <th></th><th>Nom</th><th>Entreprise</th><th>Téléphone</th><th>Statut</th><th>Assigné</th><th>Rappel</th><th></th>
-    </tr></thead><tbody>`;
-
-    leads.forEach(l => {
-        const st = LEAD_STATUSES[l.status] || LEAD_STATUSES.new;
-        const assignee = team.find(m => m.id === l.assigneeId);
-        const hasReminder = l.reminderAt && l.reminderAt > 0;
-        const isDue = hasReminder && l.reminderAt <= now;
-        const reminderLabel = hasReminder ? new Date(l.reminderAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-        const reminderDot = hasReminder ? `<span class="lead-reminder-dot ${isDue ? 'due' : 'upcoming'}"></span>` : '';
-
-        html += `<tr onclick="openEditLead('${esc(l.id)}')">
-            <td style="width:28px"><input type="checkbox" class="lead-select-cb" data-lead-id="${esc(l.id)}" onclick="event.stopPropagation()"></td>
-            <td><strong>${esc(l.firstName || '')} ${esc(l.lastName || '')}</strong>${l.email ? '<br><span style=\"font-size:0.72rem;color:var(--text-muted)\">' + esc(l.email) + '</span>' : ''}</td>
-            <td>${esc(l.company || '—')}</td>
-            <td>${esc(l.phone || '—')}</td>
-            <td><span class="lead-status-badge ${esc(st.color)}">${esc(st.label)}</span></td>
-            <td>${assignee ? esc(assignee.name) : '<span style="color:var(--text-muted)">—</span>'}</td>
-            <td>${reminderDot}${reminderLabel}</td>
-            <td style="width:30px"><button class="btn-icon" onclick="event.stopPropagation();sendSingleLeadSms('${esc(l.id)}')" title="SMS"><i class="icon-message-circle"></i></button></td>
-        </tr>`;
-    });
-    html += '</tbody></table>';
-    wrap.innerHTML = html;
-}
-
-function setLeadsFilter(filter, btn) {
-    leadsFilter = filter;
-    document.querySelectorAll('#leadsStatusFilter .leads-filter-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    renderLeadsTable();
-}
-
-/* ── Rappels automatiques ─────────────────────── */
-function checkLeadReminders() {
-    const now = Date.now();
-    let dueCount = 0;
-    getLeadsProjects().forEach(p => {
-        (p.leads || []).forEach(l => {
-            if (l.reminderAt && l.reminderAt <= now && l.status !== 'won' && l.status !== 'lost') {
-                dueCount++;
-            }
-        });
-    });
-    if (dueCount > 0) {
-        showToast(`🔔 ${dueCount} rappel${dueCount > 1 ? 's' : ''} lead${dueCount > 1 ? 's' : ''} en attente !`, 'error', 4000);
-    }
-}
-
-/* Auto-check reminders every 5 minutes */
-setInterval(() => {
-    if (currentTab === 'leads') checkLeadReminders();
-}, 5 * 60 * 1000);
-
-/* ── Project Modal ────────────────────────────── */
-function openLeadProjectModal(editId) {
-    leadsEditingProjectId = editId || null;
-    const m = document.getElementById('leadProjectModal');
-    if (editId) {
-        const p = getLeadsProject(editId);
-        if (!p) return;
-        document.getElementById('leadProjectModalTitle').innerHTML = '<i class="icon-folder"></i> Modifier le projet';
-        document.getElementById('leadProjectName').value = p.name || '';
-        document.getElementById('leadProjectDesc').value = p.description || '';
-    } else {
-        document.getElementById('leadProjectModalTitle').innerHTML = '<i class="icon-folder"></i> Nouveau projet';
-        document.getElementById('leadProjectName').value = '';
-        document.getElementById('leadProjectDesc').value = '';
-    }
-    m.classList.add('show');
-}
-
-function closeLeadProjectModal() {
-    document.getElementById('leadProjectModal').classList.remove('show');
-    leadsEditingProjectId = null;
-}
-
-function saveLeadProject() {
-    const name = (document.getElementById('leadProjectName').value || '').trim();
-    if (!name) return showToast('Nom du projet requis.', 'error');
-    const desc = (document.getElementById('leadProjectDesc').value || '').trim();
-
-    initLeadsState();
-    if (leadsEditingProjectId) {
-        const p = getLeadsProject(leadsEditingProjectId);
-        if (p) { p.name = name; p.description = desc; }
-    } else {
-        const id = 'proj-' + uid();
-        state.leads.projects.push({ id, name, description: desc, emoji: '📁', leads: [] });
-        leadsActiveProjectId = id;
-    }
-    autoSave();
-    closeLeadProjectModal();
-    renderLeads();
-}
-
-/* ── Lead Modal ───────────────────────────────── */
-function openLeadModal(editId) {
-    leadsEditingId = editId || null;
-    const m = document.getElementById('leadModal');
-    populateAssigneeSelect();
-
-    if (editId) {
-        const project = getLeadsProject(leadsActiveProjectId);
-        const lead = project ? (project.leads || []).find(l => l.id === editId) : null;
-        if (!lead) return;
-        document.getElementById('leadModalTitle').innerHTML = '<i class="icon-user"></i> Modifier le lead';
-        document.getElementById('leadFirstName').value = lead.firstName || '';
-        document.getElementById('leadLastName').value = lead.lastName || '';
-        document.getElementById('leadPhone').value = lead.phone || '';
-        document.getElementById('leadEmail').value = lead.email || '';
-        document.getElementById('leadStatus').value = lead.status || 'new';
-        document.getElementById('leadAssignee').value = lead.assigneeId || '';
-        document.getElementById('leadCompany').value = lead.company || '';
-        document.getElementById('leadNotes').value = lead.notes || '';
-        document.getElementById('leadDeleteBtn').style.display = '';
-        if (lead.reminderAt) {
-            const d = new Date(lead.reminderAt);
-            document.getElementById('leadReminderDate').value = d.toISOString().slice(0, 10);
-            document.getElementById('leadReminderTime').value = d.toTimeString().slice(0, 5);
-        } else {
-            document.getElementById('leadReminderDate').value = '';
-            document.getElementById('leadReminderTime').value = '09:00';
-        }
-    } else {
-        document.getElementById('leadModalTitle').innerHTML = '<i class="icon-user-plus"></i> Ajouter un lead';
-        document.getElementById('leadFirstName').value = '';
-        document.getElementById('leadLastName').value = '';
-        document.getElementById('leadPhone').value = '';
-        document.getElementById('leadEmail').value = '';
-        document.getElementById('leadStatus').value = 'new';
-        document.getElementById('leadAssignee').value = '';
-        document.getElementById('leadCompany').value = '';
-        document.getElementById('leadNotes').value = '';
-        document.getElementById('leadReminderDate').value = '';
-        document.getElementById('leadReminderTime').value = '09:00';
-        document.getElementById('leadDeleteBtn').style.display = 'none';
-    }
-    m.classList.add('show');
-}
-
-function closeLeadModal() {
-    document.getElementById('leadModal').classList.remove('show');
-    leadsEditingId = null;
-}
-
-function populateAssigneeSelect() {
-    const sel = document.getElementById('leadAssignee');
-    if (!sel) return;
-    const team = getLeadsTeam();
-    sel.innerHTML = '<option value="">Non assigné</option>' + team.map(m =>
-        `<option value="${esc(m.id)}">${esc(m.name)}${m.role !== 'member' ? ' (' + esc(m.role) + ')' : ''}</option>`
-    ).join('');
-}
-
-function saveLeadFromModal() {
-    if (!leadsActiveProjectId) return showToast('Sélectionne d\'abord un projet.', 'error');
-    const project = getLeadsProject(leadsActiveProjectId);
-    if (!project) return;
-
-    const firstName = (document.getElementById('leadFirstName').value || '').trim();
-    const lastName = (document.getElementById('leadLastName').value || '').trim();
-    if (!firstName && !lastName) return showToast('Nom ou prénom requis.', 'error');
-
-    const phone = (document.getElementById('leadPhone').value || '').trim();
-    const email = (document.getElementById('leadEmail').value || '').trim();
-    const status = document.getElementById('leadStatus').value || 'new';
-    const assigneeId = document.getElementById('leadAssignee').value || '';
-    const company = (document.getElementById('leadCompany').value || '').trim();
-    const notes = (document.getElementById('leadNotes').value || '').trim();
-
-    let reminderAt = 0;
-    const rDate = document.getElementById('leadReminderDate').value;
-    if (rDate) {
-        const rTime = document.getElementById('leadReminderTime').value || '09:00';
-        reminderAt = new Date(`${rDate}T${rTime}`).getTime();
-    }
-
-    if (!project.leads) project.leads = [];
-
-    if (leadsEditingId) {
-        const lead = project.leads.find(l => l.id === leadsEditingId);
-        if (lead) {
-            const oldStatus = lead.status;
-            Object.assign(lead, { firstName, lastName, phone, email, status, assigneeId, company, notes, reminderAt, updatedAt: Date.now() });
-            if (oldStatus !== status) {
-                if (!lead.history) lead.history = [];
-                lead.history.push({ type: 'status', from: oldStatus, to: status, at: Date.now() });
-            }
-        }
-    } else {
-        project.leads.push({
-            id: 'lead-' + uid(), firstName, lastName, phone, email, status, assigneeId, company, notes, reminderAt,
-            createdAt: Date.now(), updatedAt: Date.now(), history: [{ type: 'created', at: Date.now() }]
-        });
-    }
-
-    autoSave();
-    closeLeadModal();
-    renderLeads();
-}
-
-function openEditLead(leadId) {
-    openLeadModal(leadId);
-}
-
-function deleteLead() {
-    if (!leadsEditingId || !leadsActiveProjectId) return;
-    const project = getLeadsProject(leadsActiveProjectId);
-    if (!project) return;
-    const lead = (project.leads || []).find(l => l.id === leadsEditingId);
-    if (!lead || !confirm(`Supprimer ${lead.firstName} ${lead.lastName} ?`)) return;
-    project.leads = project.leads.filter(l => l.id !== leadsEditingId);
-    autoSave();
-    closeLeadModal();
-    renderLeads();
-}
-
-/* ── Team Modal ───────────────────────────────── */
-function openLeadTeamModal() {
-    initLeadsState();
-    renderTeamModalList();
-    populateTeamParentSelect();
-    document.getElementById('teamMemberName').value = '';
-    document.getElementById('teamMemberRole').value = 'member';
-    document.getElementById('teamMemberParent').value = '';
-    document.getElementById('leadTeamModal').classList.add('show');
-}
-
-function closeLeadTeamModal() {
-    document.getElementById('leadTeamModal').classList.remove('show');
-    renderLeads();
-}
-
-function renderTeamModalList() {
-    const list = document.getElementById('leadTeamList');
-    const team = getLeadsTeam();
-    if (!team.length) {
-        list.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;padding:0.5rem 0">Aucun membre dans l\'équipe.</div>';
-        return;
-    }
-    list.innerHTML = team.map(m => {
-        const parent = team.find(t => t.id === m.parentId);
-        const roleBadge = `<span class="lead-role-badge ${esc(m.role)}">${esc(m.role === 'manager' ? 'Responsable' : m.role === 'leader' ? 'Chef' : 'Membre')}</span>`;
-        return `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--card-border)">
-            <span style="flex:1;font-size:0.85rem">${esc(m.name)} ${roleBadge}${parent ? '<span style=\"font-size:0.72rem;color:var(--text-muted)\"> ← ' + esc(parent.name) + '</span>' : ''}</span>
-            <button class="btn-icon" onclick="removeTeamMember('${esc(m.id)}')" title="Supprimer">✕</button>
-        </div>`;
-    }).join('');
-}
-
-function populateTeamParentSelect() {
-    const sel = document.getElementById('teamMemberParent');
-    const team = getLeadsTeam();
-    sel.innerHTML = '<option value="">Aucun (top level)</option>' + team.map(m =>
-        `<option value="${esc(m.id)}">${esc(m.name)}</option>`
-    ).join('');
-}
-
-function addTeamMember() {
-    const name = (document.getElementById('teamMemberName').value || '').trim();
-    if (!name) return showToast('Nom requis.', 'error');
-    const role = document.getElementById('teamMemberRole').value || 'member';
-    const parentId = document.getElementById('teamMemberParent').value || '';
-    initLeadsState();
-    state.leads.team.push({ id: 'tm-' + uid(), name, role, parentId });
-    autoSave();
-    document.getElementById('teamMemberName').value = '';
-    renderTeamModalList();
-    populateTeamParentSelect();
-}
-
-function removeTeamMember(memberId) {
-    if (!confirm('Supprimer ce membre ?')) return;
-    // Reassign children to parent of removed member
-    const member = state.leads.team.find(m => m.id === memberId);
-    if (!member) return;
-    state.leads.team.forEach(m => {
-        if (m.parentId === memberId) m.parentId = member.parentId || '';
-    });
-    state.leads.team = state.leads.team.filter(m => m.id !== memberId);
-    // Unassign leads from this member
-    getLeadsProjects().forEach(p => {
-        (p.leads || []).forEach(l => {
-            if (l.assigneeId === memberId) l.assigneeId = '';
-        });
-    });
-    autoSave();
-    renderTeamModalList();
-    populateTeamParentSelect();
-}
-
-/* ── SMS Modal ────────────────────────────────── */
-function getSelectedLeadIds() {
-    return Array.from(document.querySelectorAll('.lead-select-cb:checked')).map(cb => cb.dataset.leadId);
-}
-
-function getLeadsForSms(leadIds) {
-    const project = getLeadsProject(leadsActiveProjectId);
-    if (!project) return [];
-    return (project.leads || []).filter(l => leadIds.includes(l.id) && l.phone);
-}
-
-function openLeadSmsModal() {
-    const ids = getSelectedLeadIds();
-    if (!ids.length) {
-        // If none selected, use all leads with phone in current project
-        const project = getLeadsProject(leadsActiveProjectId);
-        if (!project) return showToast('Sélectionne un projet d\'abord.', 'error');
-        const allWithPhone = (project.leads || []).filter(l => l.phone);
-        if (!allWithPhone.length) return showToast('Aucun lead avec numéro de téléphone.', 'error');
-        document.getElementById('smsRecipientsSummary').textContent = `${allWithPhone.length} destinataire(s) avec numéro — tous les leads du projet`;
-        document.getElementById('leadSmsModal').dataset.leadIds = JSON.stringify(allWithPhone.map(l => l.id));
-    } else {
-        const withPhone = getLeadsForSms(ids);
-        if (!withPhone.length) return showToast('Aucun des leads sélectionnés n\'a de numéro.', 'error');
-        document.getElementById('smsRecipientsSummary').textContent = `${withPhone.length} destinataire(s) sélectionné(s)`;
-        document.getElementById('leadSmsModal').dataset.leadIds = JSON.stringify(withPhone.map(l => l.id));
-    }
-    document.getElementById('smsMessageTemplate').value = '';
-    document.getElementById('smsPreview').textContent = '—';
-    document.getElementById('leadSmsModal').classList.add('show');
-}
-
-function sendSingleLeadSms(leadId) {
-    const project = getLeadsProject(leadsActiveProjectId);
-    if (!project) return;
-    const lead = (project.leads || []).find(l => l.id === leadId);
-    if (!lead || !lead.phone) return showToast('Ce lead n\'a pas de numéro de téléphone.', 'error');
-    document.getElementById('smsRecipientsSummary').textContent = `1 destinataire : ${lead.firstName} ${lead.lastName} (${lead.phone})`;
-    document.getElementById('leadSmsModal').dataset.leadIds = JSON.stringify([leadId]);
-    document.getElementById('smsMessageTemplate').value = '';
-    document.getElementById('smsPreview').textContent = '—';
-    document.getElementById('leadSmsModal').classList.add('show');
-}
-
-function closeLeadSmsModal() {
-    document.getElementById('leadSmsModal').classList.remove('show');
-}
-
-function previewSmsMessage() {
-    const tpl = document.getElementById('smsMessageTemplate').value || '';
-    const leadIdsRaw = document.getElementById('leadSmsModal').dataset.leadIds;
-    let ids = [];
-    try { ids = JSON.parse(leadIdsRaw || '[]'); } catch {}
-    const project = getLeadsProject(leadsActiveProjectId);
-    if (!project || !ids.length) { document.getElementById('smsPreview').textContent = '—'; return; }
-    const first = (project.leads || []).find(l => l.id === ids[0]);
-    if (!first) { document.getElementById('smsPreview').textContent = '—'; return; }
-    document.getElementById('smsPreview').textContent = interpolateSmsTemplate(tpl, first, project);
-}
-
-function interpolateSmsTemplate(tpl, lead, project) {
-    return tpl
-        .replace(/\{prenom\}/gi, lead.firstName || '')
-        .replace(/\{nom\}/gi, lead.lastName || '')
-        .replace(/\{entreprise\}/gi, lead.company || '')
-        .replace(/\{projet\}/gi, project.name || '');
-}
-
-function sendLeadsSms() {
-    const tpl = (document.getElementById('smsMessageTemplate').value || '').trim();
-    if (!tpl) return showToast('Message requis.', 'error');
-    const leadIdsRaw = document.getElementById('leadSmsModal').dataset.leadIds;
-    let ids = [];
-    try { ids = JSON.parse(leadIdsRaw || '[]'); } catch {}
-    const project = getLeadsProject(leadsActiveProjectId);
-    if (!project || !ids.length) return;
-
-    const logActivity = document.getElementById('smsLogActivity')?.checked !== false;
-    let sentCount = 0;
-
-    ids.forEach(id => {
-        const lead = (project.leads || []).find(l => l.id === id);
-        if (!lead || !lead.phone) return;
-        const msg = interpolateSmsTemplate(tpl, lead, project);
-
-        // Open Google Messages web SMS link — the user's default SMS app/site handles sending
-        const phoneClean = lead.phone.replace(/\s+/g, '');
-        const smsUrl = `https://messages.google.com/web/conversations/new?phone=${encodeURIComponent(phoneClean)}&body=${encodeURIComponent(msg)}`;
-        window.open(smsUrl, '_blank');
-
-        if (logActivity) {
-            if (!lead.history) lead.history = [];
-            lead.history.push({ type: 'sms', message: msg, at: Date.now() });
-        }
-        sentCount++;
-    });
-
-    if (sentCount) {
-        autoSave();
-        showToast(`${sentCount} SMS préparé${sentCount > 1 ? 's' : ''} dans Google Messages.`, 'success');
-    }
-    closeLeadSmsModal();
-    renderLeadsTable();
-}
-
-/* ═══════════════════════════════════════════════════════
    Site Tabs — Dynamic favourite-site tabs with persistent sessions
    ═══════════════════════════════════════════════════════ */
 function getBrowserApi() {
@@ -4115,21 +3588,79 @@ function hostFromAnyUrl(raw) {
     }
 }
 
+function sitePartitionForTabId(tabId) {
+    const slug = String(tabId || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .slice(0, 64) || 'default';
+    return `persist:site-tab-${slug}`;
+}
+
+const DEFAULT_SITE_TABS = [
+    { id: 'site-default-evento', label: 'Evento', url: 'https://evento.renater.fr/', icon: 'icon-calendar-days' },
+    { id: 'site-default-filesender', label: 'FileSender', url: 'https://filesender.renater.fr/', icon: 'icon-send' },
+    { id: 'site-default-renavisio', label: 'RenaVisio', url: 'https://rendez-vous.renater.fr/home/renavisio', icon: 'icon-video' },
+    { id: 'site-default-github', label: 'GitHub', url: 'https://github.com/', icon: 'icon-github' },
+    { id: 'site-default-gemini', label: 'Gemini', url: 'https://gemini.google.com/app', icon: 'icon-sparkles' },
+];
+
+function buildDefaultSiteTabs() {
+    return normalizeSiteTabs(DEFAULT_SITE_TABS);
+}
+
 /* ── Persistence ──────────────────────────────── */
+function normalizeSiteTabs(input) {
+    if (!Array.isArray(input)) return [];
+    return input
+        .filter(t => t && t.id && t.url)
+        .map(t => ({
+            id: String(t.id),
+            label: String(t.label || hostFromAnyUrl(t.url) || 'Site'),
+            url: ensureUrlWithScheme(t.url),
+            icon: String(t.icon || 'icon-globe'),
+            partition: (typeof t.partition === 'string' && t.partition.trim())
+                ? t.partition.trim()
+                : sitePartitionForTabId(t.id),
+        }));
+}
+
 function saveSiteTabs() {
+    siteTabs = normalizeSiteTabs(siteTabs);
+    if (!state.settings) state.settings = {};
+    state.settings.siteTabs = siteTabs;
+    autoSave();
+
+    // Keep legacy localStorage mirror for backward compatibility.
     try {
         localStorage.setItem(SITE_TABS_STORAGE_KEY, JSON.stringify(siteTabs));
     } catch {}
 }
 
 function loadSiteTabs() {
+    const fromState = normalizeSiteTabs(state?.settings?.siteTabs);
+    if (fromState.length) {
+        try {
+            localStorage.setItem(SITE_TABS_STORAGE_KEY, JSON.stringify(fromState));
+        } catch {}
+        return fromState;
+    }
+
     try {
         const raw = localStorage.getItem(SITE_TABS_STORAGE_KEY);
-        if (!raw) return [];
+        if (!raw) return buildDefaultSiteTabs();
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.filter(t => t && t.id && t.url) : [];
+        const normalized = normalizeSiteTabs(parsed);
+
+        // One-time migration localStorage -> persisted backend app state.
+        if (normalized.length) {
+            if (!state.settings) state.settings = {};
+            state.settings.siteTabs = normalized;
+            autoSave();
+        }
+
+        return normalized;
     } catch {
-        return [];
+        return buildDefaultSiteTabs();
     }
 }
 
@@ -4204,7 +3735,7 @@ function saveSiteTabFromModal() {
         }
     } else {
         const id = 'site-' + uid();
-        siteTabs.push({ id, label, url, icon });
+        siteTabs.push({ id, label, url, icon, partition: sitePartitionForTabId(id) });
         saveSiteTabs();
         renderSiteTabButtons();
         switchTab(id);
@@ -4241,7 +3772,12 @@ async function initSiteTabView(tabId) {
 
     if (!siteTabsInitialized[tabId]) {
         siteTabsInitialized[tabId] = true;
-        await api.browserCreateTab({ tabId, url: tab.url, activate: true });
+        await api.browserCreateTab({
+            tabId,
+            url: tab.url,
+            partition: tab.partition || sitePartitionForTabId(tab.id),
+            activate: true
+        });
     } else {
         await api.browserActivateTab(tabId);
     }
@@ -4254,15 +3790,26 @@ async function initSiteTabView(tabId) {
 }
 
 function updateSiteTabViewVisibility() {
+    syncBrowserVisibilityForUiState();
+}
+
+function hasOpenModalOverlay() {
+    return !!document.querySelector('.modal-overlay.show');
+}
+
+async function syncBrowserVisibilityForUiState() {
     const api = getBrowserApi();
     if (!api || !api.browserSetVisible) return;
     const isSiteTab = currentTab.startsWith('site-');
-    api.browserSetVisible(isSiteTab).then(() => {
-        if (!isSiteTab) return;
-        if (siteTabsInitialized[currentTab]) {
-            api.browserActivateTab(currentTab).then(() => updateSiteTabViewBounds());
+    const shouldShowBrowser = isSiteTab && !hasOpenModalOverlay();
+
+    try {
+        await api.browserSetVisible(shouldShowBrowser);
+        if (shouldShowBrowser && siteTabsInitialized[currentTab]) {
+            await api.browserActivateTab(currentTab);
+            updateSiteTabViewBounds();
         }
-    });
+    } catch {}
 }
 
 function updateSiteTabViewBounds() {
@@ -4331,10 +3878,31 @@ function bindBrowserEventsIfNeeded() {
     browserEventsBound = true;
 }
 
+let siteModalVisibilityObserverStarted = false;
+function initSiteModalVisibilityBridge() {
+    if (siteModalVisibilityObserverStarted) return;
+    siteModalVisibilityObserverStarted = true;
+
+    const overlays = Array.from(document.querySelectorAll('.modal-overlay'));
+    if (!overlays.length) return;
+
+    const observer = new MutationObserver(() => {
+        if (currentTab.startsWith('site-')) {
+            syncBrowserVisibilityForUiState();
+        }
+    });
+
+    overlays.forEach((el) => {
+        observer.observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+}
+
 /* ── Startup restore ──────────────────────────── */
 function initSiteTabs() {
     siteTabs = loadSiteTabs();
+    saveSiteTabs(); // persist partition migration for old tabs
     renderSiteTabButtons();
+    initSiteModalVisibilityBridge();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -4626,8 +4194,7 @@ function renderAgendaWeek(events) {
             const k = encodeURIComponent(agendaEventKey(ev));
             const bg = hexToRgba(ev.calendarColor || '#6c8aff', 0.2);
             const border = ev.calendarColor || '#6c8aff';
-            const text = ev.calendarTextColor || 'var(--text)';
-            return `<div class="agenda-event-card all-day" style="background:${esc(bg)};border-color:${esc(border)};color:${esc(text)}" onclick="handleAgendaCardClick(event, '${k}')">
+            return `<div class="agenda-event-card all-day" style="background:${esc(bg)};border-color:${esc(border)}" onclick="handleAgendaCardClick(event, '${k}')">
                 <strong>${esc(ev.summary || '(Sans titre)')}</strong>
                 <div class="agenda-event-meta">${esc(ev.calendarName || 'Agenda')} • Journee entiere</div>
             </div>`;
@@ -4635,7 +4202,11 @@ function renderAgendaWeek(events) {
         return `<div class="agenda-all-day-cell">${cards}</div>`;
     }).join('');
 
-    const hours = Array.from({ length: 24 }, (_, i) => i);
+    const visibleStartMin = 8 * 60;
+    const visibleHours = 14;
+    const pxPerHour = 32;
+    const visibleEndMin = visibleStartMin + (visibleHours * 60);
+    const hours = Array.from({ length: visibleHours }, (_, i) => i + 8);
     const hoursHtml = hours.map((h) => `<div class="agenda-hour-slot">${String(h).padStart(2, '0')}:00</div>`).join('');
 
     const dayColumns = weekDays.map((day) => {
@@ -4643,17 +4214,19 @@ function renderAgendaWeek(events) {
         const cls = key === todayYmd ? 'agenda-day-column today' : 'agenda-day-column';
         const segments = (timedByDay[key] || []).sort((a, b) => a.startMin - b.startMin);
         const eventsHtml = segments.map((segment) => {
+            const displayStart = Math.max(segment.startMin, visibleStartMin);
+            const displayEnd = Math.min(segment.endMin, visibleEndMin);
+            if (displayEnd <= displayStart) return '';
             const k = encodeURIComponent(agendaEventKey(segment.event));
-            const top = Math.max(0, (segment.startMin / 60) * 48);
-            const duration = Math.max(18, ((segment.endMin - segment.startMin) / 60) * 48);
+            const top = Math.max(0, ((displayStart - visibleStartMin) / 60) * pxPerHour);
+            const duration = Math.max(14, ((displayEnd - displayStart) / 60) * pxPerHour);
             const startLabel = `${String(Math.floor(segment.startMin / 60)).padStart(2, '0')}:${String(segment.startMin % 60).padStart(2, '0')}`;
             const endLabel = `${String(Math.floor(segment.endMin / 60)).padStart(2, '0')}:${String(segment.endMin % 60).padStart(2, '0')}`;
             const bg = hexToRgba(segment.event.calendarColor || '#6c8aff', 0.2);
             const border = segment.event.calendarColor || '#6c8aff';
-            const text = segment.event.calendarTextColor || 'var(--text)';
             const ro = segment.movable ? '' : 'readonly';
             const handles = segment.movable ? '<div class="agenda-resize-handle top"></div><div class="agenda-resize-handle bottom"></div>' : '';
-            return `<div class="agenda-event-card timed ${ro}" data-event-key="${k}" style="top:${top}px;height:${duration}px;border-color:${esc(border)};background:${esc(bg)};color:${esc(text)}" onclick="handleAgendaCardClick(event, '${k}')">${handles}
+            return `<div class="agenda-event-card timed ${ro}" data-event-key="${k}" style="top:${top}px;height:${duration}px;border-color:${esc(border)};background:${esc(bg)}" onclick="handleAgendaCardClick(event, '${k}')">${handles}
                 <strong>${esc(segment.event.summary || '(Sans titre)')}</strong>
                 <div class="agenda-event-meta">${esc(startLabel)} - ${esc(endLabel)} • ${esc(segment.event.calendarName || 'Agenda')}</div>
             </div>`;
@@ -4685,7 +4258,15 @@ function renderAgendaWeek(events) {
 function bindAgendaInteractions() {
     const cards = document.querySelectorAll('.agenda-event-card.timed:not(.readonly)');
     const dayColumns = [...document.querySelectorAll('.agenda-day-column')];
-    const pxQuarter = 12;
+    const visibleStartMin = 8 * 60;
+    const visibleHours = 14;
+    const totalMinutes = visibleHours * 60;
+    const visibleEndMin = visibleStartMin + totalMinutes;
+
+    function getGridHeight() {
+        const col = document.querySelector('.agenda-day-column');
+        return col ? col.offsetHeight : 448;
+    }
 
     cards.forEach((card) => {
         card.onmousedown = (evt) => {
@@ -4700,6 +4281,7 @@ function bindAgendaInteractions() {
             const ev = findAgendaEventByKey(key);
             if (!ev || !ev.canEdit) return;
 
+            const gridH = getGridHeight();
             agendaInteractionState = {
                 mode,
                 card,
@@ -4707,10 +4289,12 @@ function bindAgendaInteractions() {
                 sourceDayKey: dayCol.dataset.dayKey,
                 targetDayKey: dayCol.dataset.dayKey,
                 startY: evt.clientY,
-                originalTop: parseFloat(card.style.top || '0') || 0,
-                originalHeight: parseFloat(card.style.height || '24') || 24,
+                originalTop: card.offsetTop,
+                originalHeight: card.offsetHeight,
                 changed: false,
             };
+            card.style.top = `${card.offsetTop}px`;
+            card.style.height = `${card.offsetHeight}px`;
             card.classList.add(mode === 'move' ? 'dragging' : 'resizing');
             evt.preventDefault();
         };
@@ -4720,11 +4304,12 @@ function bindAgendaInteractions() {
         const s = agendaInteractionState;
         if (!s) return;
         const dy = evt.clientY - s.startY;
-        const gridMax = 24 * 48;
+        const gridH = getGridHeight();
+        const pxQuarter = gridH / (visibleHours * 4);
 
         if (s.mode === 'move') {
             let top = s.originalTop + dy;
-            top = Math.max(0, Math.min(gridMax - s.originalHeight, Math.round(top / pxQuarter) * pxQuarter));
+            top = Math.max(0, Math.min(gridH - s.originalHeight, Math.round(top / pxQuarter) * pxQuarter));
             if (Math.abs(top - s.originalTop) > 0.1) s.changed = true;
             s.card.style.top = `${top}px`;
 
@@ -4744,14 +4329,14 @@ function bindAgendaInteractions() {
                 top = s.originalTop + (s.originalHeight - pxQuarter);
             }
             top = Math.max(0, Math.round(top / pxQuarter) * pxQuarter);
-            height = Math.min(gridMax - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
+            height = Math.min(gridH - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
             if (Math.abs(top - s.originalTop) > 0.1 || Math.abs(height - s.originalHeight) > 0.1) s.changed = true;
             s.card.style.top = `${top}px`;
             s.card.style.height = `${height}px`;
         } else {
             let height = s.originalHeight + dy;
             const top = parseFloat(s.card.style.top || '0') || 0;
-            height = Math.min(gridMax - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
+            height = Math.min(gridH - top, Math.max(pxQuarter, Math.round(height / pxQuarter) * pxQuarter));
             if (Math.abs(height - s.originalHeight) > 0.1) s.changed = true;
             s.card.style.height = `${height}px`;
         }
@@ -4763,10 +4348,12 @@ function bindAgendaInteractions() {
         dayColumns.forEach((c) => c.classList.remove('drag-target'));
         s.card.classList.remove('dragging', 'resizing');
 
+        const gridH = getGridHeight();
+        const pxQuarter = gridH / (visibleHours * 4);
         const top = parseFloat(s.card.style.top || '0') || 0;
         const height = parseFloat(s.card.style.height || '24') || 24;
-        const startMin = Math.max(0, Math.min(24 * 60 - 15, Math.round(top / pxQuarter) * 15));
-        const endMin = Math.min(24 * 60, startMin + Math.max(15, Math.round(height / pxQuarter) * 15));
+        const startMin = Math.max(visibleStartMin, Math.min(visibleEndMin - 15, visibleStartMin + (Math.round(top / pxQuarter) * 15)));
+        const endMin = Math.min(visibleEndMin, startMin + Math.max(15, Math.round(height / pxQuarter) * 15));
         const dayKey = s.targetDayKey || s.sourceDayKey;
         const changed = s.changed;
         const key = s.key;
@@ -4871,7 +4458,6 @@ async function loadAgendaWeek() {
         return;
     }
 
-    container.innerHTML = '<div class="agenda-empty-state">Chargement des evenements...</div>';
     try {
         const start = toYmd(agendaWeekStart);
         const end = toYmd(weekEndExclusive);
@@ -5166,11 +4752,6 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         switchTab('agenda');
     }
-    // Ctrl+6 — switch to Leads tab
-    if ((e.ctrlKey || e.metaKey) && e.key === '6') {
-        e.preventDefault();
-        switchTab('leads');
-    }
     // Ctrl+7..9 — switch to site tabs (dynamic)
     if ((e.ctrlKey || e.metaKey) && ['7','8','9'].includes(e.key)) {
         const idx = parseInt(e.key) - 7;
@@ -5194,10 +4775,6 @@ document.addEventListener('keydown', (e) => {
         if (typeof closeDeleteMailModal === 'function') closeDeleteMailModal();
         if (typeof closeAgendaCreateModal === 'function') closeAgendaCreateModal();
         if (typeof closeAgendaEventModal === 'function') closeAgendaEventModal();
-        if (typeof closeLeadProjectModal === 'function') closeLeadProjectModal();
-        if (typeof closeLeadModal === 'function') closeLeadModal();
-        if (typeof closeLeadTeamModal === 'function') closeLeadTeamModal();
-        if (typeof closeLeadSmsModal === 'function') closeLeadSmsModal();
     }
     // Delete — delete selected inbox mail
     if (e.key === 'Delete' && currentTab === 'inbox' && selectedInboxId) {
