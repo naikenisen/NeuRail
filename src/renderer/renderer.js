@@ -66,6 +66,7 @@ function switchTab(tab) {
     if (tab === 'mail') renderMailTab();
     if (tab === 'inbox') loadInbox();
     if (tab === 'graph') initGraphIfNeeded();
+    if (tab === 'mailchat') checkChatbotStatus();
     updateSiteTabViewVisibility();
 }
 
@@ -3503,6 +3504,375 @@ function graphFit() {
     const svg = d3.select('#graphSvg');
     const rect = svg.node().getBoundingClientRect();
     svg.transition().duration(400).call(d3Zoom.transform, d3.zoomIdentity.translate(rect.width / 2, rect.height / 2).scale(0.5).translate(-rect.width / 2, -rect.height / 2));
+}
+
+/* ═══════════════════════════════════════════════════════
+   MailChat (Chatbot)
+   ═══════════════════════════════════════════════════════ */
+let chatbotNeo4jAvailable = null; // null = not checked
+let chatbotIngestPollTimer = null;
+let chatbotLoading = false;
+let mailchatLastResults = [];
+const mailchatDetailsCache = new Map();
+
+function mailchatLog(msg, data = null) {
+    if (data !== null) {
+        console.log(`[MailChat] ${msg}`, data);
+    } else {
+        console.log(`[MailChat] ${msg}`);
+    }
+}
+
+function setChatbotQueryInfo(message, kind = 'info') {
+    const info = document.getElementById('chatbotQueryInfo');
+    if (!info) return;
+    const color = kind === 'error' ? '#f38ba8' : (kind === 'success' ? '#4ade80' : 'var(--text-muted)');
+    info.style.color = color;
+    info.textContent = message || '';
+}
+
+function collectSemanticFields() {
+    return {
+        who: (document.getElementById('chatbotFieldWho')?.value || '').trim(),
+        docType: (document.getElementById('chatbotFieldDocType')?.value || '').trim(),
+        context: (document.getElementById('chatbotFieldContext')?.value || '').trim(),
+        period: (document.getElementById('chatbotFieldPeriod')?.value || '').trim(),
+        attachment: (document.getElementById('chatbotFieldAttachment')?.value || '').trim(),
+        comment: (document.getElementById('chatbotComment')?.value || '').trim(),
+    };
+}
+
+function buildSemanticQuestion(fields) {
+    const parts = [];
+    if (fields.who) parts.push(`Expéditeur/personne: ${fields.who}`);
+    if (fields.docType) parts.push(`Type recherché: ${fields.docType}`);
+    if (fields.context) parts.push(`Contexte: ${fields.context}`);
+    if (fields.period) parts.push(`Période: ${fields.period}`);
+    if (fields.attachment === 'oui') parts.push('Le mail doit contenir une pièce jointe');
+    if (fields.attachment === 'non') parts.push('Le mail ne doit pas contenir de pièce jointe');
+    if (fields.comment) parts.push(`Commentaire: ${fields.comment}`);
+    return parts.join(' | ').trim();
+}
+
+function clearChatbotSemanticFields() {
+    const ids = [
+        'chatbotFieldWho',
+        'chatbotFieldDocType',
+        'chatbotFieldContext',
+        'chatbotFieldPeriod',
+        'chatbotFieldAttachment',
+        'chatbotComment',
+    ];
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (el.tagName === 'SELECT') el.selectedIndex = 0;
+        else el.value = '';
+    }
+    mailchatLastResults = [];
+    mailchatDetailsCache.clear();
+    renderMailchatAnswer('', 'Remplissez les champs puis lancez une recherche.');
+    renderMailchatResults([]);
+    renderMailchatAttachments([]);
+    setChatbotQueryInfo('');
+}
+
+function renderMailchatAnswer(answer, fallbackText = '') {
+    const pane = document.getElementById('chatbotAnswerPane');
+    if (!pane) return;
+    if (answer) {
+        const safeAnswer = answer.replace(/https?:\/\/\S+/gi, '').trim();
+        pane.innerHTML = `<div class="chatbot-answer-box">${marked.parse(esc(safeAnswer))}</div>`;
+        return;
+    }
+    pane.innerHTML = `<div class="chatbot-welcome"><p>${esc(fallbackText || 'Aucune synthèse IA pour cette recherche.')}</p></div>`;
+}
+
+function renderMailchatResults(results) {
+    const pane = document.getElementById('chatbotResultsPane');
+    if (!pane) return;
+    if (!results || !results.length) {
+        pane.innerHTML = '<div class="chatbot-welcome"><p>Aucun mail trouvé.</p></div>';
+        return;
+    }
+    pane.innerHTML = results.map((r, i) => {
+        return `
+            <details class="mailchat-result-item" ontoggle="onMailchatResultToggle(${i}, this)">
+                <summary class="mailchat-result-summary">
+                    <strong>${esc(r.subject || 'Sans sujet')}</strong>
+                    <span class="mailchat-result-meta">📅 ${esc(r.date || '?')} · 👤 ${esc(r.sender_name || r.sender_email || '?')} · score ${esc(String(r.score ?? '?'))}</span>
+                </summary>
+                <div class="mailchat-result-body" id="mailchat-result-body-${i}">${esc(r.body_snippet || '(aperçu indisponible)')}</div>
+            </details>
+        `;
+    }).join('');
+}
+
+function renderMailchatAttachments(results) {
+    const pane = document.getElementById('chatbotAttachmentsPane');
+    if (!pane) return;
+    if (!results || !results.length) {
+        pane.innerHTML = '<div class="chatbot-welcome"><p>Aucune pièce jointe détectée.</p></div>';
+        return;
+    }
+    const groups = [];
+    for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        const attachments = Array.isArray(r.attachments) ? r.attachments.filter(Boolean) : [];
+        if (!attachments.length) continue;
+        groups.push(`
+            <div class="mailchat-att-group">
+                <h4>${esc(r.subject || `Mail ${i + 1}`)}</h4>
+                ${attachments.map((a) =>
+                    `<button class="mailchat-att-btn" onclick="openChatbotAttachment('${esc(r.mail_id || '')}', '${esc(a)}', '${esc(r.eml_file || '')}')">📎 ${esc(a)}</button>`
+                ).join('')}
+            </div>
+        `);
+    }
+    pane.innerHTML = groups.length
+        ? groups.join('')
+        : '<div class="chatbot-welcome"><p>Aucune pièce jointe détectée.</p></div>';
+}
+
+async function onMailchatResultToggle(index, detailsEl) {
+    if (!detailsEl?.open) return;
+    const result = mailchatLastResults[index];
+    if (!result) return;
+    const bodyEl = document.getElementById(`mailchat-result-body-${index}`);
+    if (!bodyEl) return;
+
+    const key = result.mail_id || result.eml_file || `idx:${index}`;
+    if (mailchatDetailsCache.has(key)) {
+        bodyEl.innerHTML = mailchatDetailsCache.get(key);
+        return;
+    }
+
+    bodyEl.textContent = 'Chargement du contenu complet…';
+    try {
+        let mail = null;
+        if (result.mail_id) {
+            const r = await fetch('/api/mail/' + encodeURIComponent(result.mail_id));
+            if (r.ok) mail = await r.json();
+        } else if (result.eml_file) {
+            const r = await fetch('/api/mail/by-eml?eml_file=' + encodeURIComponent(result.eml_file));
+            if (r.ok) mail = await r.json();
+        }
+
+        let html = '';
+        if (mail?.body && String(mail.body).trim()) {
+            html = esc(mail.body);
+        } else if (mail?.body_html && String(mail.body_html).trim()) {
+            const textFromHtml = String(mail.body_html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            html = esc(textFromHtml || result.body_snippet || '(contenu indisponible)');
+        } else {
+            html = esc(result.body_snippet || '(contenu indisponible)');
+        }
+        mailchatDetailsCache.set(key, html);
+        bodyEl.innerHTML = html;
+    } catch (err) {
+        bodyEl.textContent = `Erreur: ${err?.message || err}`;
+    }
+}
+
+function setChatbotSyncProgress(state) {
+    const wrap = document.getElementById('chatbotSyncProgress');
+    const label = document.getElementById('chatbotSyncLabel');
+    const pct = document.getElementById('chatbotSyncPercent');
+    const bar = document.getElementById('chatbotSyncBar');
+    const meta = document.getElementById('chatbotSyncMeta');
+    if (!wrap || !label || !pct || !bar || !meta) return;
+
+    if (!state || (!state.running && !state.finished)) {
+        wrap.classList.add('is-hidden');
+        return;
+    }
+
+    wrap.classList.remove('is-hidden');
+    const total = Number(state.total || 0);
+    const processed = Number(state.processed || 0);
+    const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+    const phase = state.phase || 'starting';
+    const source = state.source || '';
+    const ingested = Number(state.ingested || 0);
+
+    label.textContent = state.running ? `Sync Neo4j (${phase})` : 'Sync Neo4j terminée';
+    pct.textContent = `${percent}%`;
+    bar.style.width = `${percent}%`;
+
+    let metaText = `${processed}/${total} traités · ${ingested} ingérés`;
+    if (source) metaText += ` · ${source}`;
+    if (state.current_file) metaText += ` · ${state.current_file}`;
+    if (state.error) metaText += ` · erreur: ${state.error}`;
+    meta.textContent = metaText;
+}
+
+async function pollChatbotIngestStatus() {
+    try {
+        const r = await fetch('/api/neo4j/ingest-status');
+        const data = await r.json();
+        setChatbotSyncProgress(data);
+        if (!data.running) {
+            if (chatbotIngestPollTimer) {
+                clearInterval(chatbotIngestPollTimer);
+                chatbotIngestPollTimer = null;
+            }
+            if (data.finished) {
+                if (data.error) {
+                    setChatbotQueryInfo(`⚠️ Sync: ${data.error}`, 'error');
+                } else {
+                    setChatbotQueryInfo(`✅ ${data.ingested || 0} email(s) synchronisés dans Neo4j.`, 'success');
+                }
+            }
+            checkChatbotStatus();
+        }
+    } catch (err) {
+        mailchatLog('status poll failed', err?.message || err);
+    }
+}
+
+async function checkChatbotStatus() {
+    mailchatLog('checking Neo4j status');
+    const dot = document.getElementById('chatbotStatusDot');
+    const text = document.getElementById('chatbotStatusText');
+    dot.className = 'chatbot-status-dot loading';
+    text.textContent = 'Connexion à Neo4j…';
+    try {
+        const r = await fetch('/api/neo4j/status');
+        const data = await r.json();
+        mailchatLog('Neo4j status response', data);
+        chatbotNeo4jAvailable = data.available;
+        if (data.available) {
+            dot.className = 'chatbot-status-dot online';
+            text.textContent = 'Neo4j connecté';
+        } else {
+            dot.className = 'chatbot-status-dot offline';
+            text.textContent = 'Neo4j non disponible';
+        }
+    } catch {
+        mailchatLog('Neo4j status fetch failed');
+        chatbotNeo4jAvailable = false;
+        dot.className = 'chatbot-status-dot offline';
+        text.textContent = 'Erreur de connexion';
+    }
+}
+
+function openChatbotEmail(mailId) {
+    // Switch to inbox tab and open the email
+    switchTab('inbox');
+    setTimeout(() => openInboxMail(mailId), 200);
+}
+
+function openChatbotAttachment(mailId, attachmentName, emlFile) {
+    const query = mailId
+        ? `id=${encodeURIComponent(mailId)}`
+        : `eml_file=${encodeURIComponent(emlFile || '')}`;
+    const url = `/api/mail/attachment?${query}&name=${encodeURIComponent(attachmentName)}`;
+    window.open(url, '_blank', 'noopener');
+}
+
+async function sendChatbotQuery() {
+    if (chatbotLoading) return;
+    const fields = collectSemanticFields();
+    let question = buildSemanticQuestion(fields);
+    if (!question) return;
+
+    const useLLM = document.getElementById('chatbotUseLLM')?.checked ?? true;
+    const autoRewrite = document.getElementById('chatbotAutoRewrite')?.checked ?? true;
+    const endpoint = useLLM ? '/api/chatbot/query' : '/api/chatbot/search';
+
+    mailchatLog('query submitted', { question, fields, useLLM, autoRewrite });
+    setChatbotQueryInfo('Recherche en cours…');
+    renderMailchatAnswer('', 'Analyse en cours…');
+    renderMailchatResults([]);
+    renderMailchatAttachments([]);
+
+    chatbotLoading = true;
+    try {
+        if (autoRewrite) {
+            const n = await fetch('/api/chatbot/normalize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, fields }),
+            });
+            const nd = await n.json();
+            if (!nd.error && nd.normalized_question) {
+                question = nd.normalized_question;
+            }
+        }
+
+        const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question, top_k: 10, generate: useLLM }),
+        });
+        const data = await r.json();
+        mailchatLog('query response', {
+            ok: !data.error,
+            count: data.count,
+            retrieval: data.retrieval,
+            question_rewritten: data.question_rewritten,
+        });
+
+        if (data.error) {
+            setChatbotQueryInfo(`⚠️ ${data.error}`, 'error');
+            renderMailchatAnswer('', 'Erreur de recherche.');
+        } else {
+            const mode = data.llm_used
+                ? 'Mode GraphRAG + synthèse IA'
+                : 'Mode GraphRAG (sans synthèse IA)';
+            const rewriteNote = data.question_rewritten && data.retrieval_question
+                ? ` · Requête optimisée: ${data.retrieval_question}`
+                : '';
+            const warning = data.llm_warning ? ` · ${data.llm_warning}` : '';
+            setChatbotQueryInfo(`${mode}${rewriteNote}${warning}`, data.llm_warning ? 'error' : 'success');
+
+            mailchatLastResults = Array.isArray(data.results) ? data.results : [];
+            mailchatDetailsCache.clear();
+            renderMailchatAnswer(data.answer || '', mailchatLastResults.length ? 'Aucune réponse IA générée.' : 'Aucun résultat trouvé.');
+            renderMailchatResults(mailchatLastResults);
+            renderMailchatAttachments(mailchatLastResults);
+        }
+    } catch (err) {
+        mailchatLog('query failed', err?.message || err);
+        setChatbotQueryInfo(`⚠️ ${err.message}`, 'error');
+        renderMailchatAnswer('', 'Erreur réseau.');
+    } finally {
+        chatbotLoading = false;
+    }
+}
+
+async function chatbotIngest() {
+    const btn = document.querySelector('.chatbot-action-btn');
+    if (!btn) return;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="icon-refresh-cw"></i> Sync en cours…';
+    btn.disabled = true;
+    mailchatLog('sync requested');
+
+    try {
+        const r = await fetch('/api/neo4j/ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'both' }),
+        });
+        const data = await r.json();
+        mailchatLog('sync start response', data);
+        if (data.error) {
+            setChatbotQueryInfo(`⚠️ Sync: ${data.error}`, 'error');
+        } else {
+            setChatbotQueryInfo('Sync Neo4j démarrée…');
+            setChatbotSyncProgress(data);
+            if (chatbotIngestPollTimer) clearInterval(chatbotIngestPollTimer);
+            chatbotIngestPollTimer = setInterval(pollChatbotIngestStatus, 800);
+            await pollChatbotIngestStatus();
+        }
+    } catch (err) {
+        mailchatLog('sync request failed', err?.message || err);
+        setChatbotQueryInfo(`⚠️ ${err.message}`, 'error');
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
 }
 
 /* ═══════════════════════════════════════════════════════

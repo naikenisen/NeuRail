@@ -1571,6 +1571,397 @@
             width: 100%; cursor: pointer; accent-color: var(--accent-blue);
         }
 
+        /* ─── MailChat Tab ────────────────────────── */
+        .mailchat-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 120px);
+            max-width: 100%;
+            margin: 0;
+            width: 100%;
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-md);
+            background: var(--bg-surface);
+            overflow: hidden;
+        }
+        .mailchat-header {
+            display: flex; align-items: center; gap: 1rem;
+            padding: 0.6rem 1rem; border-bottom: 1px solid var(--card-border);
+            flex-shrink: 0;
+        }
+        .mailchat-title {
+            font-size: 1rem; font-weight: 700; color: var(--text);
+            display: flex; align-items: center; gap: 0.4rem;
+        }
+        .mailchat-header .chatbot-status {
+            border-bottom: none; padding: 0;
+        }
+        .mailchat-header-actions {
+            display: flex; align-items: center; gap: 0.5rem; margin-left: auto;
+        }
+        .mailchat-sync-progress {
+            padding: 0.45rem 1rem 0.55rem;
+            border-bottom: 1px solid var(--card-border);
+            background: rgba(137,180,250,0.04);
+        }
+        .mailchat-sync-topline {
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 0.72rem; color: var(--text-muted);
+        }
+        .mailchat-progress-track {
+            margin-top: 0.35rem;
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--card-border);
+            overflow: hidden;
+        }
+        .mailchat-progress-fill {
+            width: 0%;
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-soft));
+            transition: width 0.25s ease;
+        }
+        .mailchat-sync-meta {
+            margin-top: 0.3rem;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mailchat-semantic-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--card-border);
+            background: linear-gradient(180deg, rgba(137,180,250,0.08), rgba(137,180,250,0.02));
+        }
+        .mailchat-semantic-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(120px, 1fr));
+            gap: 0.55rem;
+        }
+        .mailchat-semantic-grid label,
+        .mailchat-comment-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+        .mailchat-semantic-grid input,
+        .mailchat-semantic-grid select,
+        .mailchat-comment-field textarea {
+            background: var(--bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.78rem;
+            padding: 0.42rem 0.55rem;
+        }
+        .mailchat-semantic-grid input:focus,
+        .mailchat-semantic-grid select:focus,
+        .mailchat-comment-field textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+        .mailchat-semantic-checkbox {
+            justify-content: flex-end;
+            align-items: flex-start;
+            padding-top: 1.2rem;
+            gap: 0.4rem !important;
+            flex-direction: row !important;
+            display: flex !important;
+        }
+        .mailchat-semantic-checkbox input {
+            width: 14px;
+            height: 14px;
+            accent-color: var(--accent-blue);
+            margin-top: 1px;
+        }
+        .mailchat-comment-field textarea {
+            min-height: 56px;
+            max-height: 110px;
+            resize: vertical;
+        }
+        .mailchat-query-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .mailchat-query-actions .chatbot-send-btn {
+            width: auto;
+            height: 34px;
+            border-radius: 999px;
+            padding: 0 0.9rem;
+            gap: 0.35rem;
+            font-size: 0.76rem;
+            font-weight: 600;
+            display: inline-flex;
+        }
+        .mailchat-query-info {
+            min-height: 18px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .mailchat-columns {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(260px, 1fr) minmax(360px, 1.4fr) minmax(260px, 1fr);
+            gap: 0;
+        }
+        .mailchat-column {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            border-right: 1px solid var(--card-border);
+        }
+        .mailchat-column:last-child {
+            border-right: none;
+        }
+        .mailchat-column > header {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text);
+            padding: 0.55rem 0.75rem;
+            border-bottom: 1px solid var(--card-border);
+            background: rgba(255,255,255,0.01);
+        }
+        .mailchat-column-body {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 0.65rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .chatbot-answer-box {
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            padding: 0.7rem;
+            font-size: 0.82rem;
+            line-height: 1.55;
+            color: var(--text);
+            white-space: pre-wrap;
+        }
+        .mailchat-result-item {
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            overflow: hidden;
+        }
+        .mailchat-result-summary {
+            padding: 0.55rem 0.65rem;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+        .mailchat-result-summary:hover {
+            background: var(--card-hover);
+        }
+        .mailchat-result-meta {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+        }
+        .mailchat-result-body {
+            padding: 0 0.65rem 0.65rem;
+            color: var(--text);
+            font-size: 0.76rem;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            border-top: 1px solid var(--card-border);
+        }
+        .mailchat-result-body iframe {
+            width: 100%;
+            min-height: 240px;
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm);
+            background: #fff;
+        }
+        .mailchat-att-group {
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            padding: 0.5rem;
+        }
+        .mailchat-att-group h4 {
+            font-size: 0.72rem;
+            margin: 0 0 0.35rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .mailchat-att-btn {
+            width: 100%;
+            border: 1px solid var(--card-border);
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            cursor: pointer;
+            text-align: left;
+            font-size: 0.74rem;
+            padding: 0.4rem 0.5rem;
+            margin-bottom: 0.35rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mailchat-att-btn:hover {
+            border-color: var(--accent-blue);
+            background: var(--card-hover);
+        }
+
+        /* ─── Graph Sub-tabs (legacy cleanup) ─────── */
+        .graph-sidebar-content { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+        .chatbot-status {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.4rem 0.6rem; font-size: 0.7rem; color: var(--text-muted);
+            border-bottom: 1px solid var(--card-border);
+        }
+        .chatbot-status-dot {
+            width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+            background: #6c7086;
+        }
+        .chatbot-status-dot.online { background: #4ade80; }
+        .chatbot-status-dot.offline { background: #f38ba8; }
+        .chatbot-status-dot.loading { background: #fab387; animation: pulse-dot 1s infinite; }
+        @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .chatbot-messages {
+            flex: 1; overflow-y: auto; padding: 0.6rem;
+            display: flex; flex-direction: column; gap: 0.6rem;
+        }
+        .chatbot-welcome {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100%; gap: 0.3rem;
+            color: var(--text-muted); text-align: center;
+        }
+        .chatbot-welcome-icon { font-size: 1.8rem; opacity: 0.3; }
+        .chatbot-welcome p { font-size: 0.8rem; margin: 0; }
+        .chatbot-hint { font-size: 0.7rem !important; opacity: 0.5; }
+
+        .chatbot-msg {
+            max-width: 95%; padding: 0.5rem 0.65rem;
+            border-radius: var(--radius-sm); font-size: 0.78rem; line-height: 1.55;
+            word-wrap: break-word;
+        }
+        .chatbot-msg.user {
+            align-self: flex-end; background: rgba(137,180,250,0.15);
+            color: var(--accent-blue); border-bottom-right-radius: 2px;
+        }
+        .chatbot-msg.bot {
+            align-self: flex-start; background: var(--card-hover);
+            color: var(--text); border-bottom-left-radius: 2px;
+        }
+        .chatbot-msg.bot .chatbot-results { margin-top: 0.4rem; }
+        .chatbot-result-card {
+            padding: 0.4rem 0.5rem; margin-top: 0.35rem;
+            border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+            background: var(--bg-surface); font-size: 0.72rem;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .chatbot-result-card.clickable {
+            cursor: pointer;
+        }
+        .chatbot-result-card.clickable:hover {
+            border-color: var(--accent-blue);
+            background: var(--card-hover);
+        }
+        .chatbot-result-card .cr-subject { font-weight: 600; color: var(--text); }
+        .chatbot-result-card .cr-meta { color: var(--text-muted); margin-top: 0.15rem; }
+        .chatbot-result-card .cr-snippet {
+            margin-top: 0.3rem; color: var(--text-muted);
+            line-height: 1.45; white-space: pre-wrap;
+        }
+        .chatbot-result-card .cr-tags { display: flex; gap: 0.25rem; margin-top: 0.2rem; flex-wrap: wrap; }
+        .chatbot-result-card .cr-tag {
+            padding: 0.1rem 0.35rem; border-radius: 999px; font-size: 0.62rem;
+            background: rgba(137,180,250,0.12); color: var(--accent-blue);
+        }
+        .chatbot-result-card .cr-tag.att {
+            background: rgba(250,179,135,0.15); color: #fab387;
+        }
+        .chatbot-result-card .cr-tag.att.clickable {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .chatbot-result-card .cr-tag.att.clickable:hover {
+            background: rgba(250,179,135,0.35);
+        }
+        .chatbot-msg.bot .chatbot-answer {
+            margin-top: 0.5rem; padding-top: 0.4rem;
+            border-top: 1px solid var(--card-border);
+            white-space: pre-wrap;
+        }
+        .chatbot-msg.typing {
+            background: var(--card-hover); color: var(--text-muted);
+        }
+        .chatbot-msg.typing::after {
+            content: '…'; animation: typing-dots 1s steps(3) infinite;
+        }
+        @keyframes typing-dots {
+            0% { content: '.'; } 33% { content: '..'; } 66% { content: '...'; }
+        }
+        .chatbot-msg.error { background: rgba(243,139,168,0.1); color: #f38ba8; }
+        .chatbot-mode-note {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            border: 1px dashed var(--card-border);
+            border-radius: var(--radius-sm);
+            padding: 0.35rem 0.5rem;
+        }
+
+        .chatbot-input-wrap {
+            display: flex; gap: 0.3rem; padding: 0.4rem 0.5rem;
+            border-top: 1px solid var(--card-border);
+        }
+        .chatbot-input-wrap textarea {
+            flex: 1; resize: none; padding: 0.4rem 0.5rem; border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm); background: var(--bg); color: var(--text);
+            font-size: 0.78rem; font-family: inherit; line-height: 1.4;
+            max-height: 80px; overflow-y: auto;
+        }
+        .chatbot-input-wrap textarea:focus { outline: none; border-color: var(--accent-blue); }
+        .chatbot-send-btn {
+            width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+            border: none; border-radius: var(--radius-sm); background: var(--accent-blue);
+            color: #fff; cursor: pointer; font-size: 0.85rem; flex-shrink: 0;
+            align-self: flex-end; transition: opacity 0.15s;
+        }
+        .chatbot-send-btn:hover { opacity: 0.85; }
+
+        .chatbot-actions {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.3rem 0.5rem; border-top: 1px solid var(--card-border);
+        }
+        .chatbot-action-btn {
+            padding: 0.25rem 0.5rem; border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm); background: transparent;
+            color: var(--text-muted); cursor: pointer; font-size: 0.68rem;
+            font-family: inherit; display: flex; align-items: center; gap: 0.25rem;
+            transition: all 0.15s;
+        }
+        .chatbot-action-btn:hover { background: var(--card-hover); color: var(--text); }
+        .chatbot-toggle-label {
+            display: flex; align-items: center; gap: 0.3rem; margin-left: auto;
+            font-size: 0.68rem; color: var(--text-muted); cursor: pointer;
+        }
+        .chatbot-toggle-label input { width: 13px; height: 13px; accent-color: var(--accent-blue); }
+
         /* ─── Responsive ─────────────────────────────── */
         @media (max-width: 600px) {
             body { padding: 1rem 0.5rem; }
@@ -1580,4 +1971,25 @@
             header h1 { font-size: 1.4rem; }
             .emoji-grid { grid-template-columns: repeat(8, 1fr); }
             .tab-btn { font-size: 0.85rem; padding: 0.7rem 0.5rem; }
+            .mailchat-container {
+                height: calc(100vh - 112px);
+            }
+            .mailchat-semantic-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .mailchat-semantic-checkbox {
+                grid-column: 1 / -1;
+                padding-top: 0.2rem;
+            }
+            .mailchat-columns {
+                grid-template-columns: 1fr;
+                grid-auto-rows: minmax(180px, 1fr);
+            }
+            .mailchat-column {
+                border-right: none;
+                border-bottom: 1px solid var(--card-border);
+            }
+            .mailchat-column:last-child {
+                border-bottom: none;
+            }
         }

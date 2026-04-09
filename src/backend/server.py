@@ -29,6 +29,8 @@ import logging
 import os
 import secrets
 import subprocess
+import sys
+import threading
 import time
 import urllib.parse
 from urllib.parse import parse_qs, urlparse
@@ -83,6 +85,111 @@ from calendar_routes import handle_oauth_callback
 from ai_service import ai_generate_reminder, ai_generate_reply, ai_reformulate
 from graph_service import export_email_to_graph, read_vault_file, scan_vault_graph
 from autoconfig_service import autoconfig_email
+
+# ── Neo4j / RAG (lazy, non-bloquant si Neo4j absent) ─
+_neo4j_driver = None
+_neo4j_embedder = None
+_neo4j_available = None  # None = not checked yet
+_neo4j_ingest_thread = None
+_neo4j_ingest_lock = threading.Lock()
+_neo4j_ingest_state = {
+    "running": False,
+    "phase": "idle",
+    "processed": 0,
+    "total": 0,
+    "ingested": 0,
+    "current_file": "",
+    "source": "",
+    "error": "",
+    "finished": False,
+}
+
+
+def _mailchat_log(message: str) -> None:
+    print(f"[mailchat] {message}", flush=True)
+
+
+def _ingest_progress_cb(ingested: int, processed: int, total: int, fname: str, source: str) -> None:
+    with _neo4j_ingest_lock:
+        _neo4j_ingest_state["processed"] = processed
+        _neo4j_ingest_state["total"] = total
+        _neo4j_ingest_state["ingested"] = ingested
+        _neo4j_ingest_state["current_file"] = fname
+        _neo4j_ingest_state["source"] = source
+
+
+def _run_neo4j_ingest_job(mode: str) -> None:
+    global _neo4j_ingest_thread
+    try:
+        driver, embedder = _get_neo4j()
+        if not driver:
+            raise RuntimeError("Neo4j non disponible")
+
+        from neo4j_ingest import (
+            init_schema,
+            ingest_eml_directory,
+            ingest_vault_directory,
+            count_eml_files,
+            count_vault_files,
+        )
+
+        init_schema(driver, embedding_dim=embedder.dimension)
+        total_ingested = 0
+
+        if mode in ("eml", "both"):
+            from app_config import MAILS_DIR as _MAILS_DIR
+            total_files = count_eml_files(_MAILS_DIR)
+            with _neo4j_ingest_lock:
+                _neo4j_ingest_state["phase"] = "eml"
+                _neo4j_ingest_state["processed"] = 0
+                _neo4j_ingest_state["total"] = total_files
+            total_ingested += ingest_eml_directory(driver, embedder, _MAILS_DIR, progress_cb=_ingest_progress_cb)
+
+        if mode in ("vault", "both"):
+            from app_config import GRAPH_MD_DIR
+            total_files = count_vault_files(GRAPH_MD_DIR)
+            with _neo4j_ingest_lock:
+                _neo4j_ingest_state["phase"] = "vault"
+                _neo4j_ingest_state["processed"] = 0
+                _neo4j_ingest_state["total"] = total_files
+            total_ingested += ingest_vault_directory(driver, embedder, GRAPH_MD_DIR, progress_cb=_ingest_progress_cb)
+
+        with _neo4j_ingest_lock:
+            _neo4j_ingest_state["running"] = False
+            _neo4j_ingest_state["finished"] = True
+            _neo4j_ingest_state["phase"] = "done"
+            _neo4j_ingest_state["ingested"] = total_ingested
+            _neo4j_ingest_state["error"] = ""
+        _mailchat_log(f"sync done: {total_ingested} email(s) ingérés")
+    except Exception as exc:
+        with _neo4j_ingest_lock:
+            _neo4j_ingest_state["running"] = False
+            _neo4j_ingest_state["finished"] = True
+            _neo4j_ingest_state["phase"] = "error"
+            _neo4j_ingest_state["error"] = str(exc)
+        _mailchat_log(f"sync error: {exc}")
+    finally:
+        _neo4j_ingest_thread = None
+
+
+def _get_neo4j():
+    """Lazy init du driver Neo4j + embedder. Retourne (driver, embedder) ou (None, None)."""
+    global _neo4j_driver, _neo4j_embedder, _neo4j_available
+    if _neo4j_available is False:
+        return None, None
+    if _neo4j_driver is not None:
+        return _neo4j_driver, _neo4j_embedder
+    try:
+        from neo4j_ingest import connect_neo4j, EmbeddingService
+        _neo4j_driver = connect_neo4j()
+        _neo4j_embedder = EmbeddingService()
+        _neo4j_available = True
+        return _neo4j_driver, _neo4j_embedder
+    except (Exception, SystemExit) as exc:
+        logger.warning("Neo4j non disponible: %s", exc)
+        _neo4j_available = False
+        return None, None
+
 
 # In-memory OAuth state store (state -> metadata) for current server process.
 GOOGLE_OAUTH_PENDING = {}
@@ -252,12 +359,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:
                 qs = parse_qs(urlparse(self.path).query)
                 mail_id = qs.get("id", [""])[0]
+                eml_file = qs.get("eml_file", [""])[0]
                 idx_raw = qs.get("idx", [None])[0]
                 filename = qs.get("name", [None])[0]
                 idx = int(idx_raw) if idx_raw is not None else None
 
                 inbox = load_inbox_index()
-                mail = next((m for m in inbox if m.get("id") == mail_id), None)
+                mail = None
+                if mail_id:
+                    mail = next((m for m in inbox if m.get("id") == mail_id), None)
+                elif eml_file:
+                    mail = next((m for m in inbox if m.get("eml_file") == eml_file), None)
                 if not mail:
                     self.send_error(404)
                     return
@@ -287,6 +399,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(500)
                 return
 
+        if self.path.startswith("/api/mail/by-eml?"):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                eml_file = (qs.get("eml_file", [""])[0] or "").strip()
+                if not eml_file:
+                    self.send_error(400)
+                    return
+                inbox = load_inbox_index()
+                mail = next((m for m in inbox if m.get("eml_file") == eml_file), None)
+                if mail:
+                    mail = enrich_mail_from_eml(mail)
+                    return self._json(mail)
+                self.send_error(404)
+                return
+            except Exception:
+                self.send_error(500)
+                return
+
         if self.path.startswith("/api/mail/"):
             mail_id = self.path.split("/api/mail/")[1]
             inbox = load_inbox_index()
@@ -309,6 +439,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json({"ok": True, "content": content, "path": relpath})
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
+
+        # ── Neo4j status ──
+        if self.path == "/api/neo4j/status":
+            driver, _ = _get_neo4j()
+            return self._json({"available": driver is not None})
+
+        if self.path == "/api/neo4j/ingest-status":
+            with _neo4j_ingest_lock:
+                return self._json(dict(_neo4j_ingest_state))
+
         super().do_GET()
 
     def do_POST(self):
@@ -368,6 +508,216 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 text = ai_generate_reply(data)
                 return self._json({"ok": True, "text": text})
             except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        # ── Chatbot Graph RAG ──
+        if self.path == "/api/chatbot/query":
+            try:
+                question = (data.get("question", "") or "").strip()
+                if not question:
+                    return self._json({"error": "Question vide"}, 400)
+                _mailchat_log(f"query received: {question[:120]}")
+                driver, embedder = _get_neo4j()
+                if not driver:
+                    return self._json({"error": "Neo4j non disponible"}, 503)
+
+                from rag_query import search_and_enrich_with_meta, generate_answer, is_llm_configured
+                top_k = min(int(data.get("top_k", 5)), 10)
+                results, search_meta = search_and_enrich_with_meta(driver, embedder, question, top_k=top_k)
+                if search_meta.get("question_rewritten"):
+                    _mailchat_log(f"query rewritten: {search_meta.get('retrieval_question', '')[:160]}")
+
+                # Build eml_file → mail_id lookup from inbox index
+                inbox = load_inbox_index()
+                eml_to_id = {m.get("eml_file", ""): m.get("id", "") for m in inbox if m.get("eml_file")}
+
+                # Structure les résultats pour le frontend
+                hits = []
+                for r in results:
+                    mail_id = eml_to_id.get(r.eml_file, "") if r.eml_file else ""
+                    hits.append({
+                        "subject": r.subject,
+                        "date": r.date,
+                        "sender_name": r.sender_name,
+                        "sender_email": r.sender_email,
+                        "recipients": r.recipients,
+                        "topics": r.topics,
+                        "attachments": r.attachments,
+                        "score": round(r.score, 3),
+                        "body_snippet": r.body_snippet[:200],
+                        "eml_file": r.eml_file,
+                        "mail_id": mail_id,
+                    })
+
+                # Génère la réponse LLM uniquement si demandé et disponible
+                answer = ""
+                llm_requested = bool(data.get("generate", True))
+                llm_available = is_llm_configured()
+                llm_used = False
+                llm_warning = ""
+                if llm_requested and not llm_available:
+                    llm_warning = (
+                        "Mode IA indisponible: GEMINI_API_KEY manquante. "
+                        "Ajoutez-la dans .env pour activer la synthese LLM."
+                    )
+
+                if llm_requested and llm_available and results:
+                    try:
+                        answer = generate_answer(question, results)
+                        llm_used = True
+                    except Exception as llm_err:
+                        logger.error("LLM error: %s", llm_err)
+                        answer = f"Erreur LLM: {llm_err}"
+
+                return self._json({
+                    "ok": True,
+                    "answer": answer,
+                    "results": hits,
+                    "count": len(hits),
+                    "retrieval": "graph_rag",
+                    "llm_requested": llm_requested,
+                    "llm_available": llm_available,
+                    "llm_used": llm_used,
+                    "llm_warning": llm_warning,
+                    "original_question": search_meta.get("original_question", question),
+                    "retrieval_question": search_meta.get("retrieval_question", question),
+                    "question_rewritten": bool(search_meta.get("question_rewritten", False)),
+                })
+            except Exception as e:
+                logger.error("Chatbot query error: %s", e)
+                _mailchat_log(f"query error: {e}")
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/chatbot/search":
+            # Recherche vectorielle seule (sans LLM) — économise les tokens
+            try:
+                question = (data.get("question", "") or "").strip()
+                if not question:
+                    return self._json({"error": "Question vide"}, 400)
+                driver, embedder = _get_neo4j()
+                if not driver:
+                    return self._json({"error": "Neo4j non disponible"}, 503)
+
+                from rag_query import search_and_enrich_with_meta
+                top_k = min(int(data.get("top_k", 5)), 10)
+                results, search_meta = search_and_enrich_with_meta(driver, embedder, question, top_k=top_k)
+
+                # Build eml_file → mail_id lookup from inbox index
+                inbox = load_inbox_index()
+                eml_to_id = {m.get("eml_file", ""): m.get("id", "") for m in inbox if m.get("eml_file")}
+
+                hits = []
+                for r in results:
+                    mail_id = eml_to_id.get(r.eml_file, "") if r.eml_file else ""
+                    hits.append({
+                        "subject": r.subject,
+                        "date": r.date,
+                        "sender_name": r.sender_name,
+                        "sender_email": r.sender_email,
+                        "recipients": r.recipients,
+                        "topics": r.topics,
+                        "attachments": r.attachments,
+                        "score": round(r.score, 3),
+                        "body_snippet": r.body_snippet[:200],
+                        "eml_file": r.eml_file,
+                        "mail_id": mail_id,
+                    })
+
+                return self._json({
+                    "ok": True,
+                    "results": hits,
+                    "count": len(hits),
+                    "original_question": search_meta.get("original_question", question),
+                    "retrieval_question": search_meta.get("retrieval_question", question),
+                    "question_rewritten": bool(search_meta.get("question_rewritten", False)),
+                })
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/chatbot/normalize":
+            # Normalise et réécrit la requête sémantique sans lancer la recherche.
+            try:
+                question = (data.get("question", "") or "").strip()
+                fields = data.get("fields", {}) or {}
+                if not question:
+                    parts = []
+                    who = (fields.get("who", "") or "").strip()
+                    doc_type = (fields.get("docType", "") or "").strip()
+                    context = (fields.get("context", "") or "").strip()
+                    period = (fields.get("period", "") or "").strip()
+                    attachment = (fields.get("attachment", "") or "").strip().lower()
+                    comment = (fields.get("comment", "") or "").strip()
+
+                    if who:
+                        parts.append(f"Expéditeur/personne: {who}")
+                    if doc_type:
+                        parts.append(f"Type recherché: {doc_type}")
+                    if context:
+                        parts.append(f"Contexte: {context}")
+                    if period:
+                        parts.append(f"Période: {period}")
+                    if attachment == "oui":
+                        parts.append("Le mail doit contenir une pièce jointe")
+                    elif attachment == "non":
+                        parts.append("Le mail ne doit pas contenir de pièce jointe")
+                    if comment:
+                        parts.append(f"Commentaire: {comment}")
+                    question = " | ".join(parts).strip()
+
+                if not question:
+                    return self._json({"error": "Question vide"}, 400)
+
+                from rag_query import rewrite_question_for_retrieval
+                normalized = rewrite_question_for_retrieval(question)
+                return self._json({
+                    "ok": True,
+                    "question": question,
+                    "normalized_question": normalized,
+                    "rewritten": normalized != question,
+                })
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/neo4j/ingest":
+            # Lance l'ingestion Neo4j en tâche de fond et retourne l'état.
+            try:
+                driver, _embedder = _get_neo4j()
+                if not driver:
+                    return self._json({"error": "Neo4j non disponible"}, 503)
+
+                mode = data.get("mode", "both")
+                if mode not in ("eml", "vault", "both"):
+                    mode = "both"
+
+                global _neo4j_ingest_thread
+                with _neo4j_ingest_lock:
+                    if _neo4j_ingest_state.get("running"):
+                        return self._json({"ok": True, "running": True, **_neo4j_ingest_state})
+
+                    _neo4j_ingest_state.update({
+                        "running": True,
+                        "phase": "starting",
+                        "processed": 0,
+                        "total": 0,
+                        "ingested": 0,
+                        "current_file": "",
+                        "source": "",
+                        "error": "",
+                        "finished": False,
+                    })
+
+                _mailchat_log(f"sync started (mode={mode})")
+                _neo4j_ingest_thread = threading.Thread(
+                    target=_run_neo4j_ingest_job,
+                    args=(mode,),
+                    daemon=True,
+                )
+                _neo4j_ingest_thread.start()
+                with _neo4j_ingest_lock:
+                    return self._json({"ok": True, "running": True, **_neo4j_ingest_state})
+            except Exception as e:
+                logger.error("Ingest error: %s", e)
+                _mailchat_log(f"sync launch error: {e}")
                 return self._json({"error": str(e)}, 500)
 
         # ── Account management ──
@@ -559,7 +909,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 
-        # ── Export email to graph markdown ──
+        # ── Export email to graph markdown + Neo4j ──
         if self.path == "/api/mail/export-graph":
             try:
                 mail_id = data.get("id", "")
@@ -568,7 +918,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if not mail:
                     return self._json({"error": "Mail introuvable"}, 404)
                 md_path = export_email_to_graph(mail)
-                return self._json({"ok": True, "path": md_path})
+
+                # Also ingest into Neo4j if available
+                neo4j_ok = False
+                driver, embedder = _get_neo4j()
+                if driver:
+                    try:
+                        eml_file = mail.get("eml_file", "")
+                        if eml_file:
+                            eml_path = os.path.join(MAILS_DIR, eml_file)
+                            if os.path.isfile(eml_path):
+                                from neo4j_ingest import ingest_single_eml
+                                ingest_single_eml(driver, embedder, eml_path)
+                                neo4j_ok = True
+                    except Exception as neo4j_err:
+                        logger.warning("Neo4j ingest after export: %s", neo4j_err)
+
+                return self._json({"ok": True, "path": md_path, "neo4j": neo4j_ok})
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 
@@ -579,10 +945,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 visible = [m for m in inbox if not m.get("deleted")]
                 exported = 0
                 errors = []
+
+                # Prepare Neo4j for bulk ingest
+                driver, embedder = _get_neo4j()
+                if driver:
+                    try:
+                        from neo4j_ingest import init_schema
+                        init_schema(driver)
+                    except Exception:
+                        pass
+
                 for mail in visible:
                     try:
                         export_email_to_graph(mail)
                         exported += 1
+                        # Also ingest into Neo4j
+                        if driver:
+                            try:
+                                eml_file = mail.get("eml_file", "")
+                                if eml_file:
+                                    eml_path = os.path.join(MAILS_DIR, eml_file)
+                                    if os.path.isfile(eml_path):
+                                        from neo4j_ingest import ingest_single_eml
+                                        ingest_single_eml(driver, embedder, eml_path)
+                            except Exception as neo4j_err:
+                                logger.warning("Neo4j bulk ingest: %s", neo4j_err)
                     except Exception as e:
                         errors.append(f"{mail.get('subject', '?')}: {e}")
                 return self._json({"ok": True, "exported": exported, "errors": errors})
@@ -617,5 +1004,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"🚀 Todo → http://localhost:{PORT}")
-    http.server.HTTPServer(("", PORT), Handler).serve_forever()
+    import signal
+    import socketserver
+    import traceback
+
+    # Force unbuffered stdout/stderr so Electron sees all output
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr = sys.stdout  # Redirect stderr to stdout for Electron capture
+
+    def _sig_handler(signum, frame):
+        print(f"⚠️ Received signal {signum}, shutting down", flush=True)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _sig_handler)
+    signal.signal(signal.SIGINT, _sig_handler)
+
+    print(f"🚀 Todo → http://localhost:{PORT}", flush=True)
+    try:
+        socketserver.TCPServer.allow_reuse_address = True
+        server = http.server.HTTPServer(("", PORT), Handler)
+        print(f"✅ Server bound to port {PORT}, serving…", flush=True)
+        server.serve_forever()
+    except SystemExit as se:
+        code = se.code if se.code is not None else 0
+        if code == 0:
+            print("🛑 Server stopped cleanly.", flush=True)
+        else:
+            print(f"❌ Server exited with code {code}", flush=True)
+        sys.exit(code)
+    except Exception as exc:
+        print(f"❌ Server crashed: {type(exc).__name__}: {exc}", flush=True)
+        traceback.print_exc(file=sys.stdout)
+        sys.exit(1)
