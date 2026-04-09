@@ -67,18 +67,6 @@
             }
         }
 
-        @media (prefers-color-scheme: light) {
-            .agenda-all-day-label,
-            .agenda-time-label,
-            .agenda-hours-column {
-                background: rgba(17, 24, 39, 0.04);
-            }
-
-            .agenda-hour-slot {
-                border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-            }
-        }
-
         body.light-mode {
             --bg-primary: #F9FAFB;
             --bg-secondary: #E5E7EB;
@@ -125,8 +113,7 @@
         .inbox-item,
         .tab-btn,
         .modal,
-        .graph-sidebar,
-        .agenda-week-shell {
+        .graph-sidebar {
             transition: all 0.2s ease;
         }
 
@@ -742,9 +729,6 @@
         }
         .attachment-chip-remove:hover { color: var(--text); }
 
-        .agenda-account-select { min-width: 260px; }
-        .agenda-progress { position: static; }
-
         .site-tab-shell {
             height: calc(100vh - 140px);
             display: flex;
@@ -1020,6 +1004,25 @@
         .mail-item.is-sent { opacity: 0.7; }
         .mail-item.awaiting-response-over-3days { background: rgba(239,68,68,0.12); border-left: 2px solid #ef4444; }
         .mail-item.awaiting-response-over-3days:hover { background: rgba(239,68,68,0.18); }
+        .mail-item.relance-1 { background: rgba(245,158,11,0.10); border-left: 2px solid var(--accent-orange); }
+        .mail-item.relance-1:hover { background: rgba(245,158,11,0.18); }
+        .mail-item.relance-2 { background: rgba(239,100,20,0.12); border-left: 2px solid #ef6414; }
+        .mail-item.relance-2:hover { background: rgba(239,100,20,0.20); }
+        .mail-item.relance-3 { background: rgba(239,68,68,0.15); border-left: 2px solid #ef4444; }
+        .mail-item.relance-3:hover { background: rgba(239,68,68,0.22); }
+        .mail-relance-badge {
+            display: inline-flex; align-items: center; gap: 0.15rem;
+            font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.4rem;
+            border-radius: 99px; margin-left: 0.4rem; vertical-align: middle;
+            background: rgba(245,158,11,0.20); color: var(--accent-orange);
+        }
+        .mail-item.relance-2 .mail-relance-badge { background: rgba(239,100,20,0.20); color: #ef6414; }
+        .mail-item.relance-3 .mail-relance-badge { background: rgba(239,68,68,0.20); color: #ef4444; }
+        .btn-relance {
+            font-size: 0.75rem !important; padding: 0.2rem 0.5rem !important;
+            color: var(--accent-orange) !important; opacity: 0.8 !important;
+        }
+        .btn-relance:hover { opacity: 1 !important; background: rgba(245,158,11,0.10) !important; }
         .mail-item-check {
             width: 20px; height: 20px; min-width: 20px;
             border: 2px solid var(--card-border); border-radius: 50%;
@@ -1047,114 +1050,6 @@
         }
         .mail-item-actions button:hover { opacity: 1; background: rgba(255,255,255,0.05); }
 
-        /* ─── Timeline ──────────────────────────────── */
-        .timeline-container {
-            background: var(--bg-surface); border: 1px solid var(--card-border); border-radius: var(--radius-md);
-            margin-bottom: 1rem; overflow: visible;
-        }
-        .timeline-header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 1rem 1.5rem; border-bottom: 1px solid var(--card-border);
-        }
-        .timeline-header h2 { font-size: 1.1rem; font-weight: 700; color: var(--accent-purple); margin: 0; }
-        .timeline-nav { display: flex; gap: 0.5rem; }
-        .timeline-nav button {
-            background: var(--progress-bg); border: 1px solid var(--card-border); border-radius: 6px;
-            color: var(--text-muted); cursor: pointer; padding: 0.25rem 0.6rem; font-size: 0.8rem;
-            transition: all 0.15s;
-                }
-                .timeline-nav button:hover { border-color: var(--accent-blue); color: var(--text); }
-                .timeline-scroll {
-                    overflow: auto;
-                    padding: 10rem 1rem 1rem;
-                    height: 500px;
-                    max-height: 1000px;
-                    overscroll-behavior: contain;
-                    scrollbar-width: thin;
-                    scrollbar-color: var(--card-border) transparent;
-                }
-                .timeline-scroll::-webkit-scrollbar {
-                    width: 6px;
-                    height: 6px;
-                }
-                .timeline-scroll::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .timeline-scroll::-webkit-scrollbar-thumb {
-                    background: var(--card-border);
-                    border-radius: 3px;
-                }
-                .timeline-scroll::-webkit-scrollbar-thumb:hover {
-                    background: var(--text-muted);
-                }
-                .timeline-track {
-                    display: flex; 
-                    position: relative; 
-                    min-width: max-content; 
-                    padding-bottom: 0.5rem;
-                }
-        .timeline-day {
-            display: flex; flex-direction: column; align-items: center; min-width: 44px; position: relative;
-        }
-        .timeline-day-label {
-            font-size: 0.6rem; color: var(--text-muted); margin-bottom: 0.5rem;
-            font-weight: 600; text-align: center; line-height: 1.3;
-        }
-        .timeline-line {
-            position: absolute; top: 34px; left: 0; right: 0; height: 2px;
-            background: var(--card-border); z-index: 0;
-        }
-        .timeline-dot {
-            width: 14px; height: 14px; border-radius: 50%; position: relative; z-index: 1;
-            cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 2px solid transparent;
-        }
-        .timeline-dot:hover { transform: scale(1.4); }
-        .timeline-dot.empty { width: 6px; height: 6px; background: var(--card-border); cursor: default; border: none; }
-        .timeline-dot.empty:hover { transform: none; }
-        .timeline-dot.sent { background: var(--accent-blue); border-color: var(--accent-blue); }
-        .timeline-dot.reminder-pending { background: var(--accent-slate); border-color: var(--accent-slate); }
-        .timeline-dot.reminder-due {
-            background: #ef4444; border-color: #ef4444;
-            box-shadow: 0 0 8px rgba(239,68,68,0.5);
-            animation: pulse-red 1.5s ease-in-out infinite;
-        }
-        .timeline-dot.reminder-sent { background: var(--accent-orange); border-color: var(--accent-orange); }
-        .timeline-dot.response { background: var(--accent-green); border-color: var(--accent-green); }
-        .timeline-dot.today-marker {
-            width: 10px; height: 10px; background: var(--accent-blue);
-            border: 2px solid white; box-shadow: 0 0 6px var(--accent-blue);
-        }
-        @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 4px rgba(239,68,68,0.4); }
-            50% { box-shadow: 0 0 14px rgba(239,68,68,0.8); }
-        }
-        .timeline-event-label {
-            font-size: 0.55rem; color: var(--text-muted); max-width: 80px;
-            text-align: center; margin-top: 0.4rem; line-height: 1.2;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .timeline-today-col .timeline-day-label { color: var(--accent-blue); font-weight: 700; }
-        .timeline-popover {
-            position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-            background: var(--bg-surface); border: 1px solid var(--card-border); border-radius: var(--radius-md);
-            padding: 0.6rem; min-width: 200px; max-width: 280px; max-height: 260px; overflow-y: auto; z-index: 200;
-            box-shadow: var(--shadow-lg); display: none;
-        }
-        .timeline-popover.show { display: block; }
-        .timeline-popover.below {
-            top: calc(100% + 8px);
-            bottom: auto;
-        }
-        .timeline-popover-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; }
-        .timeline-popover-actions { display: flex; flex-direction: column; gap: 0.3rem; }
-        .timeline-popover-actions button {
-            padding: 0.35rem 0.6rem; border: 1px solid var(--card-border); border-radius: 6px;
-            background: var(--progress-bg); color: var(--text); cursor: pointer;
-            font-size: 0.75rem; text-align: left; transition: all 0.15s;
-        }
-        .timeline-popover-actions button:hover { border-color: var(--accent-blue); background: rgba(74,144,244,0.1); }
-        .timeline-popover-actions button.danger:hover { border-color: #ef4444; background: rgba(239,68,68,0.1); color: #ef4444; }
-
         .reminder-body-textarea { min-height: 150px; }
         .delete-mail-subject {
             color: var(--text-muted);
@@ -1180,243 +1075,6 @@
         .form-row-time {
             display: flex;
             gap: 0.6rem;
-        }
-
-        /* ─── Agenda Weekly View ───────────────────── */
-        .agenda-week-shell {
-            background: var(--bg-surface);
-            border: 1px solid var(--card-border);
-            border-radius: var(--radius-md);
-            overflow: hidden;
-            min-height: 0;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        #tab-agenda.active {
-            height: calc(100vh - 126px);
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            overflow: hidden;
-        }
-        #tab-agenda header { margin-bottom: 0.45rem; }
-        #tab-agenda .agenda-cal-filters { margin-bottom: 0.45rem; }
-        #tab-agenda .global-progress {
-            margin-bottom: 0.45rem;
-            padding: 0.65rem 0.9rem;
-        }
-        #tab-agenda #agendaEvents {
-            flex: 1;
-            min-height: 0;
-            display: flex;
-            flex-direction: column;
-        }
-        .agenda-week-header {
-            display: grid;
-            grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
-            border-bottom: 1px solid var(--card-border);
-            background: rgba(255,255,255,0.02);
-        }
-        .agenda-week-header .day {
-            padding: 0.45rem 0.35rem;
-            text-align: center;
-            font-size: 0.82rem;
-            border-left: 1px solid var(--card-border);
-            color: var(--text-secondary);
-            font-weight: 600;
-        }
-        .agenda-week-header .day strong {
-            display: block;
-            color: var(--text-primary);
-            font-size: 0.96rem;
-            margin-top: 0.15rem;
-        }
-        .agenda-week-header .day.today strong {
-            color: var(--accent-blue);
-        }
-        .agenda-all-day-row {
-            display: grid;
-            grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
-            min-height: 42px;
-            border-bottom: 1px solid var(--card-border);
-        }
-        .agenda-all-day-label,
-        .agenda-time-label {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.82rem;
-            color: var(--text-secondary);
-            border-right: 1px solid var(--card-border);
-            background: rgba(17,24,39,0.55);
-        }
-        .agenda-all-day-cell {
-            border-left: 1px solid var(--card-border);
-            padding: 0.25rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.22rem;
-            min-height: 42px;
-        }
-        .agenda-week-grid-wrap {
-            overflow: hidden;
-            flex: 1;
-            min-height: 0;
-        }
-        .agenda-time-grid {
-            display: grid;
-            grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
-            position: relative;
-            height: 100%;
-        }
-        .agenda-hours-column {
-            border-right: 1px solid var(--card-border);
-            background: rgba(0,0,0,0.15);
-            display: flex;
-            flex-direction: column;
-        }
-        .agenda-hour-slot {
-            flex: 1;
-            border-bottom: 1px solid rgba(255,255,255,0.03);
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            padding-top: 0.12rem;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .agenda-day-column {
-            border-left: 1px solid var(--card-border);
-            position: relative;
-        }
-        .agenda-day-column.today {
-            background-color: rgba(137,180,250,0.05);
-        }
-        .agenda-event-card {
-            border-radius: 6px;
-            padding: 0.34rem 0.45rem;
-            font-size: 0.84rem;
-            line-height: 1.25;
-            border: 1px solid rgba(137,180,250,0.35);
-            background: rgba(137,180,250,0.16);
-            color: var(--text-primary);
-            cursor: pointer;
-            overflow: hidden;
-        }
-        .agenda-event-card strong {
-            display: block;
-            font-size: 0.9rem;
-            margin-bottom: 0.15rem;
-        }
-        .agenda-event-card.all-day {
-            position: static;
-            background: rgba(203,166,247,0.2);
-            border-color: rgba(203,166,247,0.35);
-        }
-        .agenda-event-card.timed {
-            position: absolute;
-            left: 4px;
-            right: 4px;
-            z-index: 2;
-        }
-        .agenda-event-meta {
-            color: var(--text-secondary);
-            font-size: 0.78rem;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .agenda-empty-state {
-            padding: 2rem;
-            text-align: center;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-        .agenda-event-actions {
-            display: flex;
-            gap: 0.35rem;
-            margin-top: 0.35rem;
-            flex-wrap: wrap;
-        }
-        .agenda-event-actions button {
-            border: 1px solid var(--card-border);
-            background: var(--progress-bg);
-            color: var(--text);
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.68rem;
-            padding: 0.2rem 0.45rem;
-        }
-        .agenda-event-actions button:hover {
-            border-color: var(--accent-blue);
-        }
-        .agenda-cal-filters {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.45rem;
-            margin: 0 0 0.8rem;
-        }
-        .agenda-cal-chip {
-            border: 1px solid var(--card-border);
-            background: rgba(255,255,255,0.02);
-            color: var(--text);
-            border-radius: 999px;
-            padding: 0.26rem 0.62rem;
-            font-size: 0.76rem;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            transition: all 0.15s;
-        }
-        .agenda-cal-chip .dot,
-        .agenda-cal-badge .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-            border: 1px solid rgba(255,255,255,0.25);
-        }
-        .agenda-cal-chip.active {
-            border-color: var(--accent-blue);
-            background: rgba(137,180,250,0.13);
-        }
-        .agenda-cal-chip:hover {
-            border-color: var(--accent-blue);
-        }
-        .agenda-cal-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            border: 1px solid var(--card-border);
-            border-radius: 999px;
-            padding: 0.25rem 0.65rem;
-            font-size: 0.78rem;
-            color: var(--text);
-            background: rgba(255,255,255,0.02);
-        }
-        .agenda-event-card.timed .agenda-resize-handle {
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 6px;
-            cursor: ns-resize;
-            z-index: 3;
-        }
-        .agenda-event-card.timed .agenda-resize-handle.top { top: 0; }
-        .agenda-event-card.timed .agenda-resize-handle.bottom { bottom: 0; }
-        .agenda-event-card.timed.dragging,
-        .agenda-event-card.timed.resizing {
-            opacity: 0.86;
-            box-shadow: 0 0 0 2px rgba(255,255,255,0.25), 0 8px 18px rgba(0,0,0,0.28);
-            z-index: 10;
-        }
-        .agenda-day-column.drag-target {
-            box-shadow: inset 0 0 0 2px rgba(137,180,250,0.35);
-        }
-        .agenda-event-card.timed.readonly {
-            cursor: default;
-            opacity: 0.75;
         }
 
         /* ─── Add Task Buttons (two-button layout) ──── */

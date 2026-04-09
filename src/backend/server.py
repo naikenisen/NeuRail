@@ -11,8 +11,8 @@ Dépendances internes :
     - json_store          : lecture/écriture atomique JSON
     - mail_utils          : parsing email, .eml I/O, seen UIDs, inbox index
     - mail_service        : protocoles POP3/IMAP/SMTP
-    - google_calendar_service : OAuth2 Google + Calendar API v3
-    - calendar_routes     : handlers HTTP pour les routes /api/calendar/*
+    - google_calendar_service : OAuth2 Google (PKCE, tokens)
+    - calendar_routes     : handler HTTP pour le callback OAuth Google
     - ai_service          : appels IA Google Gemini
     - graph_service       : graphe de connaissances et export email → Markdown
     - autoconfig_service  : auto-détection IMAP/SMTP (Mozilla Autoconfig)
@@ -74,29 +74,12 @@ from mail_service import (
     send_email_smtp as _send_email_smtp_impl,
 )
 from google_calendar_service import (
-    build_calendar_http_error_response,
     build_oauth_callback_page,
-    create_google_calendar_event,
-    delete_google_calendar_event,
     exchange_google_auth_code,
     generate_pkce_pair,
     get_valid_gmail_access_token,
-    get_google_oauth_accounts,
-    list_google_calendars,
-    list_google_calendar_events,
-    parse_google_error_payload,
-    pick_google_oauth_account,
-    update_google_calendar_event,
 )
-from calendar_routes import (
-    handle_calendar_accounts_get,
-    handle_calendar_calendars_get,
-    handle_calendar_event_create_post,
-    handle_calendar_event_delete_post,
-    handle_calendar_event_update_post,
-    handle_calendar_events_get,
-    handle_oauth_callback,
-)
+from calendar_routes import handle_oauth_callback
 from ai_service import ai_generate_reminder, ai_generate_reply, ai_reformulate
 from graph_service import export_email_to_graph, read_vault_file, scan_vault_graph
 from autoconfig_service import autoconfig_email
@@ -254,22 +237,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(loadContactsData())
         if self.path == "/api/accounts":
             return self._json(load_accounts())
-        if self.path == "/api/calendar/accounts":
-            return handle_calendar_accounts_get(self, get_google_oauth_accounts=get_google_oauth_accounts)
-        if self.path.startswith("/api/calendar/calendars"):
-            return handle_calendar_calendars_get(
-                self,
-                pick_google_oauth_account=pick_google_oauth_account,
-                list_google_calendars=list_google_calendars,
-                build_calendar_http_error_response=build_calendar_http_error_response,
-            )
-        if self.path.startswith("/api/calendar/events"):
-            return handle_calendar_events_get(
-                self,
-                pick_google_oauth_account=pick_google_oauth_account,
-                list_google_calendar_events=list_google_calendar_events,
-                parse_google_error_payload=parse_google_error_payload,
-            )
         if self.path == "/api/inbox":
             inbox = load_inbox_index()
             # Filter out deleted and sent, sort by date desc
@@ -489,34 +456,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json({"ok": True, "auth_url": auth_url})
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
-
-        # ── Google Calendar events CRUD ──
-        if self.path == "/api/calendar/events":
-            return handle_calendar_event_create_post(
-                self,
-                data,
-                pick_google_oauth_account=pick_google_oauth_account,
-                create_google_calendar_event=create_google_calendar_event,
-                build_calendar_http_error_response=build_calendar_http_error_response,
-            )
-
-        if self.path == "/api/calendar/events/update":
-            return handle_calendar_event_update_post(
-                self,
-                data,
-                pick_google_oauth_account=pick_google_oauth_account,
-                update_google_calendar_event=update_google_calendar_event,
-                build_calendar_http_error_response=build_calendar_http_error_response,
-            )
-
-        if self.path == "/api/calendar/events/delete":
-            return handle_calendar_event_delete_post(
-                self,
-                data,
-                pick_google_oauth_account=pick_google_oauth_account,
-                delete_google_calendar_event=delete_google_calendar_event,
-                parse_google_error_payload=parse_google_error_payload,
-            )
 
         # ── Email autoconfig (Mozilla Thunderbird DB) ──
         if self.path == "/api/autoconfig":

@@ -47,7 +47,7 @@
             <button class="tab-btn" data-tab="inbox" onclick="switchTab('inbox')"><i class="icon-inbox"></i> Inbox</button>
             <button class="tab-btn" data-tab="mail" onclick="switchTab('mail')"><i class="icon-send"></i> Rédiger</button>
             <button class="tab-btn" data-tab="graph" onclick="switchTab('graph')"><i class="icon-network"></i> Graph</button>
-            <button class="tab-btn" data-tab="agenda" onclick="switchTab('agenda')"><i class="icon-calendar-days"></i> Agenda</button>
+
         </div>
         <div class="tab-bar-scroll" id="siteTabButtons"></div>
         <button class="tab-btn tab-btn-add-site tab-btn-add-site-accent" onclick="openAddSiteModal()" title="Ajouter un site"><i class="icon-plus"></i></button>
@@ -97,9 +97,6 @@
 
     <!-- MAIL TAB -->
     <div class="tab-content" id="tab-mail">
-        <!-- Timeline -->
-        <div class="timeline-container" id="timeline-container"></div>
-
         <!-- Pending Mail List -->
         <div class="mail-pending-list" id="mail-pending-list"></div>
 
@@ -188,29 +185,6 @@
             </div>
         </div>
 
-    </div>
-
-    <!-- AGENDA TAB -->
-    <div class="tab-content" id="tab-agenda">
-        <header>
-            <div class="header-actions">
-                <select id="agendaAccount" class="agenda-account-select" onchange="onAgendaAccountChange()"></select>
-                <button onclick="connectAgendaOAuth()"><i class="icon-link"></i> Connecter Google</button>
-                <button onclick="agendaPrevWeek()">◀</button>
-                <button onclick="agendaToday()">Aujourd'hui</button>
-                <button onclick="agendaNextWeek()">▶</button>
-                <button onclick="openAgendaCreateModal()"><i class="icon-plus"></i> Nouvel événement</button>
-                <button onclick="loadAgendaWeek()"><i class="icon-refresh-cw"></i> Actualiser</button>
-            </div>
-        </header>
-        <div id="agendaCalendarFilters" class="agenda-cal-filters"></div>
-        <div class="global-progress agenda-progress">
-            <div class="global-progress-header">
-                <span id="agendaMonthLabel">Semaine</span>
-                <span class="counter" id="agendaCountLabel">0 événement</span>
-            </div>
-        </div>
-        <div id="agendaEvents" class="agenda-week-shell"></div>
     </div>
 
     
@@ -545,104 +519,6 @@
         <div class="modal-actions">
             <button onclick="closeSignatureModal()">Annuler</button>
             <button class="btn-primary" onclick="saveSignatureFromModal()"><i class="icon-save"></i> Enregistrer</button>
-        </div>
-    </div>
-</div>
-
-<!-- Agenda Create Modal -->
-<div class="modal-overlay" id="agendaCreateModal" onclick="if(event.target===this)closeAgendaCreateModal()">
-    <div class="modal modal-w-520">
-        <h2><i class="icon-plus"></i> Nouvel événement</h2>
-        <div class="form-group">
-            <label>Titre</label>
-            <input type="text" id="agendaCreateSummary" placeholder="Titre de l'événement">
-        </div>
-        <div class="form-group">
-            <label>Agenda</label>
-            <select id="agendaCreateCalendar"></select>
-        </div>
-        <div class="form-group">
-            <label>Journée entière</label>
-            <label class="checkbox-inline-label">
-                <input type="checkbox" id="agendaCreateAllDay" onchange="toggleAgendaCreateAllDay()">
-                Événement toute la journée
-            </label>
-        </div>
-        <div class="form-group" id="agendaCreateDateGroup">
-            <label>Date</label>
-            <input type="date" id="agendaCreateDate">
-        </div>
-        <div class="form-group form-row-time" id="agendaCreateTimeGroup">
-            <div class="flex-1">
-                <label>Début</label>
-                <input type="time" id="agendaCreateStartTime" value="09:00">
-            </div>
-            <div class="flex-1">
-                <label>Fin</label>
-                <input type="time" id="agendaCreateEndTime" value="10:00">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Lieu</label>
-            <input type="text" id="agendaCreateLocation" placeholder="Salle, visio, adresse...">
-        </div>
-        <div class="form-group">
-            <label>Description</label>
-            <textarea id="agendaCreateDescription" rows="4" placeholder="Détails"></textarea>
-        </div>
-        <div class="modal-actions">
-            <button onclick="closeAgendaCreateModal()">Annuler</button>
-            <button class="btn-primary" onclick="createAgendaEvent()"><i class="icon-save"></i> Créer</button>
-        </div>
-    </div>
-</div>
-
-<!-- Agenda Event Modal -->
-<div class="modal-overlay" id="agendaEventModal" onclick="if(event.target===this)closeAgendaEventModal()">
-    <div class="modal modal-w-560">
-        <h2><i class="icon-calendar-days"></i> Modifier l'événement</h2>
-        <div class="form-group">
-            <label>Titre</label>
-            <input type="text" id="agendaEventTitleInput">
-        </div>
-        <div class="form-group">
-            <label>Agenda</label>
-            <div id="agendaEventCalendarBadge" class="agenda-cal-badge"></div>
-        </div>
-        <div class="form-group">
-            <label>Journée entière</label>
-            <label class="checkbox-inline-label">
-                <input type="checkbox" id="agendaEventAllDay" onchange="toggleAgendaEventAllDay()">
-                Événement toute la journée
-            </label>
-        </div>
-        <div class="form-group">
-            <label>Date</label>
-            <input type="date" id="agendaEventDate">
-        </div>
-        <div class="form-group form-row-time" id="agendaEventTimeGroup">
-            <div class="flex-1">
-                <label>Début</label>
-                <input type="time" id="agendaEventStartTime">
-            </div>
-            <div class="flex-1">
-                <label>Fin</label>
-                <input type="time" id="agendaEventEndTime">
-            </div>
-        </div>
-        <div class="mail-field" id="agendaEventLocationWrap">
-            <label>Lieu</label>
-            <input type="text" id="agendaEventLocation" placeholder="Lieu">
-        </div>
-        <div class="mail-field" id="agendaEventDescriptionWrap">
-            <label>Description</label>
-            <textarea id="agendaEventDescription" rows="4" placeholder="Description"></textarea>
-        </div>
-        <div class="modal-actions">
-            <button class="btn-primary" id="agendaEventSaveBtn" onclick="saveSelectedAgendaEvent()"><i class="icon-save"></i> Enregistrer</button>
-            <button id="agendaEventOpenBtn" onclick="openSelectedAgendaEvent()"><i class="icon-external-link"></i> Ouvrir</button>
-            <button class="btn-danger" id="agendaEventDeleteBtn" onclick="deleteSelectedAgendaEvent()"><i class="icon-trash-2"></i> Supprimer</button>
-            <button onclick="closeAgendaEventModal()">Fermer</button>
         </div>
     </div>
 </div>
