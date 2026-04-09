@@ -341,6 +341,19 @@
         .global-progress-header {
             display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem;
         }
+        .global-progress-right {
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+        .btn-archive-progress {
+            padding: 0.3rem 0.7rem; border: 1px solid var(--card-border); border-radius: 999px;
+            background: var(--bg-secondary); color: var(--text-muted); cursor: pointer;
+            font-size: 0.75rem; font-weight: 600; transition: all 0.16s;
+            display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap;
+        }
+        .btn-archive-progress:hover {
+            background: rgba(249,115,22,0.1); color: #f59e0b;
+            border-color: rgba(249,115,22,0.3); box-shadow: 0 0 0 1px rgba(249,115,22,0.2);
+        }
         .global-progress-header span:first-child { font-weight: 600; font-size: 1rem; }
         .global-progress-header .counter { font-size: 0.9rem; color: var(--text-muted); }
         .global-progress-header .counter strong { color: var(--accent-green); }
@@ -456,6 +469,47 @@
             cursor: pointer; font-size: 0.85rem; transition: all 0.15s; margin-top: 0.75rem;
         }
         .add-section-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+        /* ─── Archives ───────────────────────────────── */
+        .archives-section {
+            margin-top: 2rem; border-top: 1px solid var(--card-border); padding-top: 1rem;
+        }
+        .archives-header {
+            display: flex; align-items: center; gap: 0.5rem; cursor: pointer;
+            font-size: 0.95rem; font-weight: 600; color: var(--text-muted);
+            padding: 0.5rem 0; user-select: none;
+        }
+        .archives-header:hover { color: var(--text); }
+        .archives-toggle { font-size: 0.85rem; width: 1rem; text-align: center; }
+        .archives-count {
+            margin-left: auto; font-size: 0.8rem; font-weight: 500;
+            color: var(--text-muted); opacity: 0.7;
+        }
+        .archives-body { padding-top: 0.5rem; }
+        .archive-batch { margin-bottom: 1rem; }
+        .archive-batch-date {
+            font-size: 0.78rem; color: var(--text-muted); font-weight: 600;
+            margin-bottom: 0.4rem; opacity: 0.7;
+        }
+        .archive-task {
+            display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem;
+            font-size: 0.85rem; color: var(--text-muted); border-left: 2px solid var(--card-border);
+            margin-left: 0.5rem; text-decoration: line-through; opacity: 0.65;
+        }
+        .archive-task:hover { opacity: 1; }
+        .archive-task-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .archive-mail-badge {
+            font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 3px;
+            background: rgba(99,102,241,0.12); color: #818cf8; font-weight: 600;
+        }
+        .archive-task-section {
+            font-size: 0.65rem; padding: 0.1rem 0.45rem; border-radius: 3px;
+            border: 1px solid; font-weight: 500; white-space: nowrap; opacity: 0.7;
+        }
+        .btn-restore {
+            opacity: 0.4; transition: opacity 0.15s;
+        }
+        .btn-restore:hover { opacity: 1; color: var(--accent-green) !important; }
 
         /* ─── Drag & Drop ────────────────────────────── */
         .task-item[draggable="true"] { cursor: grab; }

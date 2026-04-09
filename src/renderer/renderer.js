@@ -91,6 +91,7 @@ async function loadState() {
     if (!state.settings) state.settings = { geminiKey: '' };
     if (!state.reminders) state.reminders = [];
     if (!state.mailEvents) state.mailEvents = [];
+    if (!state.archives) state.archives = [];
     // Migration: convert old isMail flag to type field, old dismissed to status
     state.sections.forEach(s => {
         s.tasks.forEach(t => {
@@ -132,7 +133,8 @@ function render() {
     const app = document.getElementById('app');
     const scrollY = window.scrollY;
     app.innerHTML = renderHeader() + renderProgress() + renderSections()
-        + (editMode ? '<button class="add-section-btn" onclick="openSectionModal()">+ Nouvelle section</button>' : '');
+        + (editMode ? '<button class="add-section-btn" onclick="openSectionModal()">+ Nouvelle section</button>' : '')
+        + renderArchives();
     updateProgress();
     setupDragDrop();
     window.scrollTo(0, scrollY);
@@ -150,11 +152,18 @@ function renderHeader() {
 }
 
 function renderProgress() {
+    const hasCompleted = state.sections.some(s => s.tasks.some(t => t.done));
+    const archiveBtn = hasCompleted
+        ? `<button class="btn-archive-progress" onclick="archiveCompletedTasks()" title="Archiver les tâches terminées et repartir à zéro"><i class="icon-archive"></i> Reset &amp; Archiver</button>`
+        : '';
     return `
     <div class="global-progress">
         <div class="global-progress-header">
             <span>Progression globale</span>
-            <span class="counter"><strong id="gDone">0</strong> / <span id="gTotal">0</span> tâches</span>
+            <div class="global-progress-right">
+                ${archiveBtn}
+                <span class="counter"><strong id="gDone">0</strong> / <span id="gTotal">0</span> tâches</span>
+            </div>
         </div>
         <div class="progress-bar-track">
             <div class="progress-bar-fill" id="gBar"></div>
@@ -274,6 +283,94 @@ function updateProgress() {
     if (gBar) gBar.style.width = pct + '%';
     if (gPercent) gPercent.textContent = pct + ' %';
     if (pct === 100 && total > 0) launchConfetti();
+}
+
+/* ═══════════════════════════════════════════════════════
+   Archive Operations
+   ═══════════════════════════════════════════════════════ */
+let archivesExpanded = false;
+
+function renderArchives() {
+    const archives = state.archives || [];
+    if (!archives.length) return '';
+    const totalArchived = archives.reduce((n, a) => n + a.tasks.length, 0);
+    const batchesHtml = archives.slice().reverse().map(a => {
+        const d = new Date(a.date);
+        const dateStr = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const tasksHtml = a.tasks.map(t => {
+            const isMail = t.type === 'mail' || t.isMail;
+            const mailBadge = isMail ? '<span class="archive-mail-badge">mail</span>' : '';
+            const restoreBtn = editMode
+                ? `<button class="btn-icon btn-restore" onclick="restoreFromArchive('${a.id}','${t.id}')" title="Restaurer"><i class="icon-rotate-ccw"></i></button>`
+                : '';
+            return `<div class="archive-task">
+                <span class="archive-task-label">${esc(t.label)}</span>
+                ${mailBadge}
+                <span class="archive-task-section" style="border-color:${COLOR_HEX[t.sectionColor] || '#94a3b8'}">${esc(t.sectionTitle || '')}</span>
+                ${restoreBtn}
+            </div>`;
+        }).join('');
+        return `<div class="archive-batch">
+            <div class="archive-batch-date">${dateStr} — ${a.tasks.length} tâche${a.tasks.length > 1 ? 's' : ''}</div>
+            ${tasksHtml}
+        </div>`;
+    }).join('');
+    return `
+    <div class="archives-section">
+        <div class="archives-header" onclick="archivesExpanded=!archivesExpanded;render()">
+            <span class="archives-toggle">${archivesExpanded ? '▾' : '▸'}</span>
+            <span>Archives</span>
+            <span class="archives-count">${totalArchived} tâche${totalArchived > 1 ? 's' : ''}</span>
+        </div>
+        ${archivesExpanded ? `<div class="archives-body">${batchesHtml}</div>` : ''}
+    </div>`;
+}
+
+function restoreFromArchive(archiveId, taskId) {
+    const archives = state.archives || [];
+    const archive = archives.find(a => a.id === archiveId);
+    if (!archive) return;
+    const task = archive.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    // Find the original section or use the first one
+    const origSection = state.sections.find(s => s.title === task.sectionTitle);
+    const targetSection = origSection || state.sections[0];
+    if (!targetSection) return;
+    // Restore task (remove archive metadata)
+    const restored = { ...task, done: false };
+    delete restored.sectionTitle;
+    delete restored.sectionColor;
+    delete restored.archivedAt;
+    targetSection.tasks.push(restored);
+    // Remove from archive
+    archive.tasks = archive.tasks.filter(t => t.id !== taskId);
+    // Remove empty archive batches
+    state.archives = archives.filter(a => a.tasks.length > 0);
+    render();
+    autoSave();
+}
+
+function archiveCompletedTasks() {
+    const completed = [];
+    const now = new Date().toISOString();
+    state.sections.forEach(s => {
+        const archivable = s.tasks.filter(t => {
+            if (!t.done) return false;
+            // Don't archive mail tasks that were sent but not yet responded to
+            if ((t.type === 'mail' || t.isMail) && t.sentAt && !t.respondedAt) return false;
+            return true;
+        });
+        archivable.forEach(t => {
+            completed.push({ ...t, sectionTitle: s.title, sectionColor: s.color, archivedAt: now });
+        });
+        const archiveIds = new Set(archivable.map(t => t.id));
+        s.tasks = s.tasks.filter(t => !archiveIds.has(t.id));
+    });
+    if (!completed.length) return;
+    if (!state.archives) state.archives = [];
+    state.archives.push({ id: uid(), date: now, tasks: completed });
+    render();
+    autoSave();
 }
 
 /* ═══════════════════════════════════════════════════════
