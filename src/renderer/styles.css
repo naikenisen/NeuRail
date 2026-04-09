@@ -956,6 +956,25 @@
         .mail-item.is-sent { opacity: 0.7; }
         .mail-item.awaiting-response-over-3days { background: rgba(239,68,68,0.12); border-left: 2px solid #ef4444; }
         .mail-item.awaiting-response-over-3days:hover { background: rgba(239,68,68,0.18); }
+        .mail-item.relance-1 { background: rgba(245,158,11,0.10); border-left: 2px solid var(--accent-orange); }
+        .mail-item.relance-1:hover { background: rgba(245,158,11,0.18); }
+        .mail-item.relance-2 { background: rgba(239,100,20,0.12); border-left: 2px solid #ef6414; }
+        .mail-item.relance-2:hover { background: rgba(239,100,20,0.20); }
+        .mail-item.relance-3 { background: rgba(239,68,68,0.15); border-left: 2px solid #ef4444; }
+        .mail-item.relance-3:hover { background: rgba(239,68,68,0.22); }
+        .mail-relance-badge {
+            display: inline-flex; align-items: center; gap: 0.15rem;
+            font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.4rem;
+            border-radius: 99px; margin-left: 0.4rem; vertical-align: middle;
+            background: rgba(245,158,11,0.20); color: var(--accent-orange);
+        }
+        .mail-item.relance-2 .mail-relance-badge { background: rgba(239,100,20,0.20); color: #ef6414; }
+        .mail-item.relance-3 .mail-relance-badge { background: rgba(239,68,68,0.20); color: #ef4444; }
+        .btn-relance {
+            font-size: 0.75rem !important; padding: 0.2rem 0.5rem !important;
+            color: var(--accent-orange) !important; opacity: 0.8 !important;
+        }
+        .btn-relance:hover { opacity: 1 !important; background: rgba(245,158,11,0.10) !important; }
         .mail-item-check {
             width: 20px; height: 20px; min-width: 20px;
             border: 2px solid var(--card-border); border-radius: 50%;

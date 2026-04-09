@@ -1105,6 +1105,10 @@ function renderMailList() {
     container.innerHTML = html;
 }
 
+function getMailRelanceCount(taskId) {
+    return (state.reminders || []).filter(r => r.taskId === taskId && r.status === 'sent').length;
+}
+
 function renderMailGroup(title, mails, isExpanded = true, groupType = null) {
     const hasToggle = groupType === 'terminated';
     const toggleBtn = hasToggle ? `<button onclick="event.stopPropagation();toggleRespondedMailsVisibility()" class="mail-group-toggle" title="${respondedMailsExpanded ? 'Replier' : 'Déplier'}"><i class="icon-chevron-${respondedMailsExpanded ? 'down' : 'right'}"></i></button>` : '';
@@ -1114,15 +1118,27 @@ function renderMailGroup(title, mails, isExpanded = true, groupType = null) {
         const status = getMailTaskStatus(m);
         const statusLabel = getMailStatusLabel(status);
         const isSelected = selectedMailTask && selectedMailTask.tid === m.id;
+        const relanceCount = getMailRelanceCount(m.id);
         
         // Check if mail is over 3 days old
         const isOverThreeDays = m.sentAt && !m.respondedAt && (Date.now() - m.sentAt) > 3 * 24 * 60 * 60 * 1000;
+
+        // Color class based on relance count
+        let relanceCls = '';
+        if (relanceCount === 1) relanceCls = 'relance-1';
+        else if (relanceCount === 2) relanceCls = 'relance-2';
+        else if (relanceCount >= 3) relanceCls = 'relance-3';
         
-        const cls = ['mail-item', isSelected ? 'selected' : '', m.sentAt ? 'is-sent' : '', isOverThreeDays ? 'awaiting-response-over-3days' : ''].filter(Boolean).join(' ');
+        const cls = ['mail-item', isSelected ? 'selected' : '', m.sentAt ? 'is-sent' : '', isOverThreeDays && !relanceCls ? 'awaiting-response-over-3days' : '', relanceCls].filter(Boolean).join(' ');
         const checkDone = m.sentAt ? 'done' : '';
+
+        const relanceBadge = relanceCount > 0
+            ? `<span class="mail-relance-badge" title="${relanceCount} relance${relanceCount > 1 ? 's' : ''} envoyée${relanceCount > 1 ? 's' : ''}">↩ ${relanceCount}</span>`
+            : '';
 
         let actionsHtml = '';
         if (status === 'sent' || status === 'waiting') {
+            actionsHtml += `<button onclick="event.stopPropagation();quickRelance('${m.sectionId}','${m.id}')" title="Envoyer une relance" class="btn-relance"><i class="icon-mail"></i> Relancer</button>`;
             actionsHtml += `<button onclick="event.stopPropagation();markResponseReceived('${m.sectionId}','${m.id}')" title="Réponse reçue"><i class="icon-check"></i></button>`;
         }
 
@@ -1132,7 +1148,7 @@ function renderMailGroup(title, mails, isExpanded = true, groupType = null) {
                 <svg viewBox="0 0 24 24"><polyline points="4 12 10 18 20 6"/></svg>
             </div>
             <div class="mail-item-info">
-                <div class="mail-item-label">${m.sectionEmoji} ${esc(m.label || 'Sans titre')}</div>
+                <div class="mail-item-label">${m.sectionEmoji} ${esc(m.label || 'Sans titre')}${relanceBadge}</div>
                 <div class="mail-item-section">${esc(m.sectionTitle)}${m.mailTo ? ' → ' + esc(m.mailTo) : ''}</div>
             </div>
             <span class="mail-item-status ${status}">${statusLabel}</span>
@@ -1327,6 +1343,72 @@ function markResponseReceived(sid, tid) {
     autoSave();
     if (currentTab === 'mail') renderMailTab();
     showToast('Réponse reçue ! Rappels annulés.', 'success');
+}
+
+async function quickRelance(sid, tid) {
+    const s = state.sections.find(x => x.id === sid);
+    if (!s) return;
+    const t = s.tasks.find(x => x.id === tid);
+    if (!t) return;
+
+    const from = t.mailFrom || document.getElementById('mailFrom').value;
+    const to = t.mailTo || '';
+    if (!from) { showToast('Aucun compte expéditeur configuré.', 'error'); return; }
+    if (!to) { showToast('Aucun destinataire pour cette relance.', 'error'); return; }
+
+    const relanceCount = getMailRelanceCount(tid);
+    const relanceNum = relanceCount + 1;
+    const originalSubject = t.mailSubject || t.label || '';
+    const originalBody = t.mailBody || '';
+
+    const relanceSubject = `Relance : ${originalSubject}`;
+    const relanceBody = `Bonjour,\n\nJe me permets de vous relancer à propos de mon mail précédent.\n\n${originalBody}\n\nCordialement,`;
+
+    showLoading(`Envoi de la relance #${relanceNum}…`);
+    try {
+        const r = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from, to, subject: relanceSubject, body: relanceBody })
+        });
+        const result = await r.json();
+        if (!result.ok) {
+            showToast('Erreur : ' + (result.error || 'Échec de l\'envoi'), 'error', 5000);
+            return;
+        }
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 5000);
+        return;
+    } finally {
+        hideLoading();
+    }
+
+    // Mark the pending reminder as sent and create the next cycle
+    const pendingReminder = (state.reminders || []).find(r => r.taskId === tid && r.status === 'pending');
+    if (pendingReminder) {
+        const now = Date.now();
+        pendingReminder.status = 'sent';
+        pendingReminder.sentAt = now;
+        state.mailEvents = state.mailEvents || [];
+        state.mailEvents.push({
+            id: uid(), taskId: tid, sectionId: sid,
+            type: 'reminder_sent', date: now,
+            label: originalSubject, to: t.mailTo, cycle: pendingReminder.cycle
+        });
+        state.reminders.push({
+            id: uid(), taskId: tid, sectionId: sid,
+            label: t.label || originalSubject,
+            mailTo: t.mailTo || '', mailSubject: originalSubject,
+            mailBody: originalBody, mailFrom: t.mailFrom || '',
+            createdAt: now,
+            remindAt: now + 3 * 24 * 60 * 60 * 1000,
+            cycle: pendingReminder.cycle + 1, status: 'pending'
+        });
+    }
+
+    autoSave();
+    renderMailList();
+    showToast(`Relance #${relanceNum} envoyée !`, 'success', 3000);
 }
 
 function toggleMailSentFromList(sid, tid) {
