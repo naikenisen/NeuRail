@@ -1,84 +1,37 @@
 const fs = require('fs');
 const path = require('path');
 
-function registerPasswordVaultIpcHandlers({ ipcMain, browserViews, app, safeStorage }) {
-  function getPasswordVaultFilePath() {
-    return path.join(app.getPath('userData'), 'password_vault.json');
-  }
+/* ── Module-level utilities (exported for use in main.js) ─── */
 
-  function passwordEncryptionAvailable() {
-    try {
-      return !!(safeStorage && safeStorage.isEncryptionAvailable());
-    } catch {
-      return false;
+function normalizeCredentialOrigin(rawOrigin) {
+  const raw = String(rawOrigin || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return (url.hostname || '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function getVaultFilePath(app) {
+  return path.join(app.getPath('userData'), 'password_vault.json');
+}
+
+function readVaultRaw(app) {
+  const fp = getVaultFilePath(app);
+  try {
+    const raw = fs.readFileSync(fp, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.entries)) {
+      return { version: 1, entries: parsed.entries };
     }
-  }
+  } catch {}
+  return { version: 1, entries: [] };
+}
 
-  function normalizeCredentialOrigin(rawOrigin) {
-    const raw = String(rawOrigin || '').trim();
-    if (!raw) return '';
-    try {
-      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-      return (url.hostname || '').toLowerCase();
-    } catch {
-      return '';
-    }
-  }
-
-  function readPasswordVault() {
-    const fp = getPasswordVaultFilePath();
-    try {
-      const raw = fs.readFileSync(fp, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.entries)) {
-        return { version: 1, entries: parsed.entries };
-      }
-    } catch {}
-    return { version: 1, entries: [] };
-  }
-
-  function writePasswordVault(vault) {
-    const fp = getPasswordVaultFilePath();
-    fs.mkdirSync(path.dirname(fp), { recursive: true });
-    fs.writeFileSync(fp, JSON.stringify(vault, null, 2), { encoding: 'utf-8', mode: 0o600 });
-  }
-
-  function encryptVaultSecret(value) {
-    if (!passwordEncryptionAvailable()) {
-      throw new Error('Chiffrement indisponible: keyring systeme non detecte.');
-    }
-    return safeStorage.encryptString(String(value || '')).toString('base64');
-  }
-
-  function decryptVaultSecret(cipherB64) {
-    try {
-      const plain = safeStorage.decryptString(Buffer.from(String(cipherB64 || ''), 'base64'));
-      return String(plain || '');
-    } catch {
-      return '';
-    }
-  }
-
-  function listVaultEntriesDecrypted() {
-    const vault = readPasswordVault();
-    return vault.entries.map((entry) => ({
-      id: entry.id,
-      origin: entry.origin,
-      label: entry.label || '',
-      username: decryptVaultSecret(entry.usernameEnc),
-      updatedAt: entry.updatedAt || '',
-    }));
-  }
-
-  function getVaultEntryById(credentialId) {
-    const id = String(credentialId || '').trim();
-    if (!id) return null;
-    const vault = readPasswordVault();
-    return vault.entries.find((entry) => entry.id === id) || null;
-  }
-
-  function autofillLoginFormScript(username, password) {
-    return `(() => {
+function autofillLoginFormScript(username, password) {
+  return `(() => {
     const username = ${JSON.stringify(String(username || ''))};
     const password = ${JSON.stringify(String(password || ''))};
 
@@ -124,6 +77,63 @@ function registerPasswordVaultIpcHandlers({ ipcMain, browserViews, app, safeStor
     const passOk = setValue(passInput, password);
     return { ok: userOk && passOk, userOk, passOk };
   })();`;
+}
+
+function registerPasswordVaultIpcHandlers({ ipcMain, browserViews, app, safeStorage }) {
+  function getPasswordVaultFilePath() {
+    return getVaultFilePath(app);
+  }
+
+  function passwordEncryptionAvailable() {
+    try {
+      return !!(safeStorage && safeStorage.isEncryptionAvailable());
+    } catch {
+      return false;
+    }
+  }
+
+  function readPasswordVault() {
+    return readVaultRaw(app);
+  }
+
+  function writePasswordVault(vault) {
+    const fp = getPasswordVaultFilePath();
+    fs.mkdirSync(path.dirname(fp), { recursive: true });
+    fs.writeFileSync(fp, JSON.stringify(vault, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  }
+
+  function encryptVaultSecret(value) {
+    if (!passwordEncryptionAvailable()) {
+      throw new Error('Chiffrement indisponible: keyring systeme non detecte.');
+    }
+    return safeStorage.encryptString(String(value || '')).toString('base64');
+  }
+
+  function decryptVaultSecret(cipherB64) {
+    try {
+      const plain = safeStorage.decryptString(Buffer.from(String(cipherB64 || ''), 'base64'));
+      return String(plain || '');
+    } catch {
+      return '';
+    }
+  }
+
+  function listVaultEntriesDecrypted() {
+    const vault = readPasswordVault();
+    return vault.entries.map((entry) => ({
+      id: entry.id,
+      origin: entry.origin,
+      label: entry.label || '',
+      username: decryptVaultSecret(entry.usernameEnc),
+      updatedAt: entry.updatedAt || '',
+    }));
+  }
+
+  function getVaultEntryById(credentialId) {
+    const id = String(credentialId || '').trim();
+    if (!id) return null;
+    const vault = readPasswordVault();
+    return vault.entries.find((entry) => entry.id === id) || null;
   }
 
   ipcMain.handle('passwordVault:status', async () => {
@@ -245,4 +255,7 @@ function registerPasswordVaultIpcHandlers({ ipcMain, browserViews, app, safeStor
 
 module.exports = {
   registerPasswordVaultIpcHandlers,
+  normalizeCredentialOrigin,
+  readVaultRaw,
+  autofillLoginFormScript,
 };
