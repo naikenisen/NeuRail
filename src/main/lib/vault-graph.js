@@ -4,6 +4,7 @@ const path = require('path');
 
 const VAULT_PATH = path.join(os.homedir(), 'Documents', 'isenapp_mails');
 const WIKILINK_RE = /\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/g;
+const DATE_RE = /\*\*.*Date.*:\*\*\s*(\d{4}-\d{2}-\d{2})/;
 const ATTACHMENT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.svg', '.pdf', '.docx', '.xlsx', '.pptx', '.odt', '.csv', '.zip']);
 
 function sanitizeVaultRelativePath(relpath) {
@@ -43,6 +44,7 @@ function scanVaultGraph() {
 
       if (ext === '.md') {
         let tags = [];
+        let date = null;
         try {
           const content = fs.readFileSync(fullPath, 'utf-8').slice(0, 4096);
           if (content.startsWith('---')) {
@@ -54,10 +56,12 @@ function scanVaultGraph() {
               }
             }
           }
+          const dateMatch = DATE_RE.exec(content);
+          if (dateMatch) date = dateMatch[1];
         } catch {}
 
         const group = relpath.includes('mails/') ? 'mail' : 'md';
-        nodes[nameNoExt] = { id: nameNoExt, label: nameNoExt, path: relpath, type: 'md', tags, group };
+        nodes[nameNoExt] = { id: nameNoExt, label: nameNoExt, path: relpath, type: 'md', tags, group, date };
       } else if (ATTACHMENT_EXTS.has(ext)) {
         nodes[entry.name] = { id: entry.name, label: entry.name, path: relpath, type: 'attachment', tags: [], group: 'attachment' };
       }

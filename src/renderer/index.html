@@ -286,6 +286,13 @@
                 <label><input type="checkbox" checked data-group="attachment" onchange="toggleGraphGroup(this)"> <i class="icon-paperclip"></i> Fichiers</label>
                 <label><input type="checkbox" checked data-group="orphan" onchange="toggleGraphGroup(this)"> <i class="icon-circle-dashed"></i> Orphelins</label>
             </div>
+            <div class="graph-time-filters">
+                <button class="graph-time-btn active" data-period="all" onclick="setGraphTimePeriod('all')">Tout</button>
+                <button class="graph-time-btn" data-period="today" onclick="setGraphTimePeriod('today')">Aujourd'hui</button>
+                <button class="graph-time-btn" data-period="week" onclick="setGraphTimePeriod('week')">Semaine</button>
+                <button class="graph-time-btn" data-period="month" onclick="setGraphTimePeriod('month')">Mois</button>
+                <button class="graph-time-btn" data-period="year" onclick="setGraphTimePeriod('year')">Année</button>
+            </div>
             <div class="graph-repulsion-ctrl">
                 <label>
                     <span>Répulsion</span>

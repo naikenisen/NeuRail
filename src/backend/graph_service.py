@@ -31,7 +31,7 @@ except ImportError:
 MOTS_CLES = ['projet', 'stage', 'facture', 'urgent', 'réunion', 'candidature', 'rapport', 'admin', 'examen']
 
 WIKILINK_RE = re.compile(r'\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]')
-
+DATE_RE = re.compile(r'\*\*.*Date.*:\*\*\s*(\d{4}-\d{2}-\d{2})')
 
 def scan_vault_graph():
     """Scan le vault pour extraire nœuds (fichiers .md + attachments) et arêtes (wikilinks)."""
@@ -51,6 +51,7 @@ def scan_vault_graph():
             if fname.lower().endswith('.md'):
                 # Parse frontmatter for tags
                 tags = []
+                date = None
                 try:
                     with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
                         content = f.read(4096)  # Read just enough for frontmatter
@@ -62,6 +63,10 @@ def scan_vault_graph():
                                 line = line.strip()
                                 if line.startswith('- '):
                                     tags.append(line[2:].strip())
+                    # Extract date from body
+                    m = DATE_RE.search(content)
+                    if m:
+                        date = m.group(1)
                 except Exception:
                     pass
 
@@ -75,6 +80,7 @@ def scan_vault_graph():
                     'type': 'md',
                     'tags': tags,
                     'group': group,
+                    'date': date,
                 }
             else:
                 # Attachment (pdf, jpg, etc.)

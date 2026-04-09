@@ -2816,6 +2816,7 @@ let graphCurrentZoomK = 1;
 let graphRepulsionStrength = 120;
 
 let graphDataLoaded = false;
+let graphTimePeriod = 'all';
 
 const GROUP_COLORS = { mail: '#89b4fa', md: '#a6e3a1', attachment: '#fab387', orphan: '#6c7086' };
 
@@ -3398,7 +3399,10 @@ function filterGraphNodes(query) {
     items.forEach(el => {
         const match = !q || el.textContent.toLowerCase().includes(q);
         const groupHidden = graphHiddenGroups.has(el.dataset.group);
-        const visible = match && !groupHidden;
+        const nodeId = el.dataset.id;
+        const node = nodeId && graphNodeMap[nodeId];
+        const timeMatch = !node || nodeMatchesTimePeriod(node);
+        const visible = match && !groupHidden && timeMatch;
         el.style.display = visible ? '' : 'none';
         if (visible) shown++;
     });
@@ -3418,6 +3422,7 @@ function buildFilteredGraph(query) {
     const matchIds = new Set();
     graphData.nodes.forEach(n => {
         if (graphHiddenGroups.has(n.group)) return;
+        if (!nodeMatchesTimePeriod(n)) return;
         if (n.label.toLowerCase().includes(q)) matchIds.add(n.id);
     });
     // Also include direct neighbors of matched nodes for context
@@ -3448,6 +3453,44 @@ function toggleGraphGroup(checkbox) {
     const group = checkbox.dataset.group;
     if (checkbox.checked) { graphHiddenGroups.delete(group); }
     else { graphHiddenGroups.add(group); }
+    filterGraphNodes(document.getElementById('graphSearchInput').value);
+}
+
+function getTimePeriodRange(period) {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    if (period === 'today') {
+        return { start: todayStr, end: todayStr };
+    }
+    if (period === 'week') {
+        const day = now.getDay();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - ((day + 6) % 7));
+        return { start: monday.toISOString().slice(0, 10), end: todayStr };
+    }
+    if (period === 'month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        return { start: start.toISOString().slice(0, 10), end: todayStr };
+    }
+    if (period === 'year') {
+        return { start: now.getFullYear() + '-01-01', end: todayStr };
+    }
+    return null;
+}
+
+function nodeMatchesTimePeriod(node) {
+    if (graphTimePeriod === 'all') return true;
+    if (!node.date) return false;
+    const range = getTimePeriodRange(graphTimePeriod);
+    if (!range) return true;
+    return node.date >= range.start && node.date <= range.end;
+}
+
+function setGraphTimePeriod(period) {
+    graphTimePeriod = period;
+    document.querySelectorAll('.graph-time-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.period === period);
+    });
     filterGraphNodes(document.getElementById('graphSearchInput').value);
 }
 
