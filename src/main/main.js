@@ -381,7 +381,29 @@ function ensureBrowserViewTab(tabId, initialUrl, partition) {
       const found = vault.entries.find((e) => e.origin === origin) || null;
 
       const hasLoginForm = await view.webContents
-        .executeJavaScript(`!!document.querySelector('input[type="password"]')`, true)
+        .executeJavaScript(`(() => {
+          const passInputs = Array.from(document.querySelectorAll('input[type="password"]'))
+            .filter(el => {
+              const s = window.getComputedStyle(el);
+              const r = el.getBoundingClientRect();
+              return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+            });
+          // A login form has exactly one visible password field
+          // (registration/change-password forms typically have 2+)
+          if (passInputs.length !== 1) return false;
+          const userSelectors = [
+            'input[type="email"]', 'input[type="text"]',
+            'input[name="username"]', 'input[name="login"]',
+            'input[autocomplete="username"]'
+          ];
+          const hasUserField = userSelectors.some(s => {
+            const el = document.querySelector(s);
+            if (!el) return false;
+            const st = window.getComputedStyle(el);
+            return st.display !== 'none' && st.visibility !== 'hidden';
+          });
+          return hasUserField || passInputs.length === 1;
+        })()`, true)
         .catch(() => false);
 
       emitBrowserTabUpdate(tabId, {
