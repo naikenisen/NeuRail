@@ -28,19 +28,20 @@ Client de bureau Electron et Python pour centraliser la gestion des tâches, des
 
 ## Fonctionnalités
 
-NeuRail est conçu comme un poste de travail unifié pour les équipes qui gèrent à la fois leurs échanges email, leurs relances, leur organisation quotidienne et leur suivi commercial.
+NeuRail est conçu comme un poste de travail unifié :
+  L'objectif 1 est de connecter une todo list à un maileur pour gérer les relances de mail. 
+  L'objectif 2 est d'implémenter des outils d'IA génératif directement dans le maileur.
+  L'objectif 3 est de créer un outil de type GraphRAG pour la recherche des archives du maileur
 
-- Gestion des tâches dans une interface intégrée au reste du flux de travail.
-- Messagerie multi-comptes avec consultation de la boîte de réception, rédaction, réponse et envoi depuis l'application.
-- Configuration email facilitée grâce à l'auto-détection IMAP/SMTP et à la gestion centralisée des comptes.
-- Suivi des échanges sortants avec rappels pour relancer un destinataire lorsqu'une réponse est attendue.
+- Fonctionnalité de gestion des tâches dans une interface intégrée au reste du flux de travail.
+- Toutes les fonctionnalitées d'un maileur
+- Rappels pour relancer un destinataire lorsqu'une réponse est attendue.
 - Assistance IA pour reformuler un message, corriger la rédaction et générer des réponses à partir d'un contexte ou d'un prompt.
-- Sauvegarde des emails au format `.eml` et archivage en Markdown pour faciliter l'indexation, l'analyse et l'exploitation par des outils IA.
-- Visualisation des archives et des connaissances associées sous forme de graphe.
-- Intégration de Google Agenda pour consulter les calendriers et piloter les événements depuis l'application.
-- Gestion des leads, des projets et de l'organisation d'équipe dans le même environnement de travail.
+- Archivage des mails en Markdown pour l'analyse et l'exploitation par des outils IA.
+- Outil de recherche des mails utilisant GraphRAG par une base Neo4j construite à partir des Markdown archivés.
+- Possibilité d'ajouter des onglets web comme un agenda google, github etc
 
-L'objectif est de réduire les changements d'outils en regroupant dans un seul client les opérations de communication, de suivi et d'organisation.
+
 
 ---
 
