@@ -216,10 +216,10 @@
             fill: none;
         }
 
-        /* ─── App Content Area (below titlebar) ────────── */
+        /* ─── App Content Area ─────────────────────────── */
         .app-content {
-            margin-top: 38px;
-            height: calc(100vh - 38px);
+            margin-top: 0;
+            height: 100vh;
             overflow-y: auto;
             overflow-x: hidden;
             padding: 1rem 0.75rem;
@@ -238,12 +238,33 @@
             border: none;
             overflow: visible;
             min-width: 0;
+            position: sticky;
+            top: 0;
+            z-index: 120;
+            padding-top: 0.2rem;
+            -webkit-app-region: drag;
+            app-region: drag;
+        }
+        .workspace-brand {
+            font-family: 'SF Pro Display', 'Segoe UI Variable Display', 'Poppins', 'Inter', sans-serif;
+            font-size: 1.08rem;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: 0.01em;
+            display: flex;
+            align-items: center;
+            padding: 0 0.55rem 0 0.15rem;
+            flex: 0 0 auto;
+            -webkit-app-region: drag;
+            app-region: drag;
         }
         .tab-bar-fixed {
             display: flex;
             flex: 0 0 auto;
             min-width: 0;
             gap: 0.3rem;
+            -webkit-app-region: no-drag;
+            app-region: no-drag;
         }
         .tab-bar-scroll {
             display: flex;
@@ -255,6 +276,8 @@
             scrollbar-color: var(--card-border) transparent;
             gap: 0.3rem;
             padding-right: 0.25rem;
+            -webkit-app-region: no-drag;
+            app-region: no-drag;
         }
         .tab-bar-scroll::-webkit-scrollbar {
             height: 5px;
@@ -289,6 +312,8 @@
         .tab-btn-add-site {
             flex: 0 0 auto;
             border-left: 1px solid var(--card-border);
+            -webkit-app-region: no-drag;
+            app-region: no-drag;
         }
         .tab-btn-add-site-accent {
             color: var(--accent-blue);
@@ -308,6 +333,70 @@
             box-shadow: 0 0 0 1px rgba(59,130,246,0.24);
         }
         .tab-btn i { font-size: 14px; }
+
+        .tab-window-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: 1px solid var(--card-border);
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            -webkit-app-region: no-drag;
+            app-region: no-drag;
+            transition: all 0.15s ease;
+        }
+        .tab-window-btn:hover {
+            color: var(--text);
+            background: rgba(59,130,246,0.08);
+            border-color: rgba(59,130,246,0.22);
+        }
+        .tab-window-btn.close:hover {
+            background: #ef4444;
+            color: #fff;
+            border-color: #ef4444;
+        }
+        .tab-window-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke: currentColor;
+            stroke-width: 1.7;
+            fill: none;
+        }
+
+        @media (max-width: 980px) {
+            .workspace-brand {
+                font-size: 0.98rem;
+                padding-right: 0.25rem;
+            }
+            .tab-btn {
+                padding: 0.48rem 0.72rem;
+                font-size: 0.78rem;
+            }
+            .tab-window-btn {
+                width: 32px;
+                height: 32px;
+                border-radius: 9px;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .workspace-brand {
+                display: none;
+            }
+            .tab-btn i {
+                margin-right: 0;
+            }
+            .tab-btn {
+                gap: 0.2rem;
+                padding: 0.42rem 0.6rem;
+            }
+        }
+
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 

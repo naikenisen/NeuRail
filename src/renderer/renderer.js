@@ -3245,9 +3245,12 @@ setInterval(() => {
     const api = window.electronAPI;
     if (!api) return; // not running in Electron
 
-    document.getElementById('btn-minimize').addEventListener('click', () => api.minimize());
-    document.getElementById('btn-maximize').addEventListener('click', () => api.maximize());
-    document.getElementById('btn-close').addEventListener('click', () => api.close());
+    const btnMin = document.getElementById('btn-minimize');
+    const btnMax = document.getElementById('btn-maximize');
+    const btnClose = document.getElementById('btn-close');
+    if (btnMin) btnMin.addEventListener('click', () => api.minimize());
+    if (btnMax) btnMax.addEventListener('click', () => api.maximize());
+    if (btnClose) btnClose.addEventListener('click', () => api.close());
 })();
 
 /* ═══════════════════════════════════════════════════════
