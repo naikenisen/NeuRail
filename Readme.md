@@ -16,11 +16,16 @@ Client de bureau Electron et Python pour centraliser la gestion des tâches, des
 ## Table des matières
 
 - [NeuRail](#neurail)
+  - [Table des matières](#table-des-matières)
   - [Fonctionnalités](#fonctionnalités)
   - [Installation (Développement)](#installation-développement)
     - [Prérequis par système d'exploitation](#prérequis-par-système-dexploitation)
+      - [Debian / Ubuntu](#debian--ubuntu)
+      - [Arch Linux](#arch-linux)
+      - [macOS](#macos)
+      - [Windows](#windows)
     - [Mise en place](#mise-en-place)
-  - [Build & Distribution](#build--distribution)
+  - [Build \& Distribution](#build--distribution)
   - [Variables d'environnement](#variables-denvironnement)
   - [Licence](#licence)
 
@@ -40,8 +45,6 @@ NeuRail est conçu comme un poste de travail unifié :
 - Archivage des mails en Markdown pour l'analyse et l'exploitation par des outils IA.
 - Outil de recherche des mails utilisant GraphRAG par une base Neo4j construite à partir des Markdown archivés.
 - Possibilité d'ajouter des onglets web comme un agenda google, github etc
-
-
 
 ---
 
