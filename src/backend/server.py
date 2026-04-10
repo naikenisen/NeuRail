@@ -183,12 +183,33 @@ def _list_vault_mails():
                 end = content.find("---", 3)
                 if end != -1:
                     body = content[end + 3:].strip()
+            date_val = fm.get("date", "")
+            from_val = fm.get("from", "")
+            to_val = fm.get("to", "")
+            subject_val = fm.get("subject", "")
+            # Fallback: extract metadata from body text for older files
+            if not date_val or not from_val:
+                for line in body.splitlines()[:10]:
+                    if not date_val and line.startswith("**\U0001f5d3\ufe0f Date :**"):
+                        part = line.split(":", 1)[1].strip() if ":" in line else ""
+                        date_val = part.split(" ")[0].strip() if part else ""
+                    if not from_val and line.startswith("**\U0001f464 De :**"):
+                        part = line.split(":", 1)[1].strip() if ":" in line else ""
+                        from_val = part.replace("[[", "").replace("]]", "").strip()
+                    if not to_val and line.startswith("**\U0001f465 \u00c0 :**"):
+                        part = line.split(":", 1)[1].strip() if ":" in line else ""
+                        to_val = part.replace("[[", "").replace("]]", "").strip()
+            if not subject_val:
+                for line in body.splitlines()[:5]:
+                    if line.startswith("# "):
+                        subject_val = line[2:].strip()
+                        break
             mails.append({
                 "filename": fname,
-                "subject": fm.get("subject", fname.replace(".md", "")),
-                "date": fm.get("date", ""),
-                "from": fm.get("from", ""),
-                "to": fm.get("to", ""),
+                "subject": subject_val or fname.replace(".md", ""),
+                "date": date_val,
+                "from": from_val,
+                "to": to_val,
                 "eml_file": fm.get("eml_file", ""),
                 "tags": fm.get("tags", ""),
                 "body": body,
@@ -617,6 +638,17 @@ def _neo4j_docker_status() -> dict:
         return {"ok": False, "docker_available": True, "daemon_running": False, "exists": False, "running": False, "config": cfg, "neo4j_reachable": reachable, "error": "daemon docker non démarré"}
 
     if permission_denied:
+        if reachable:
+            return {
+                "ok": True,
+                "docker_available": True,
+                "daemon_running": True,
+                "docker_access": False,
+                "exists": True,
+                "running": True,
+                "config": cfg,
+                "neo4j_reachable": True,
+            }
         return {
             "ok": False,
             "docker_available": True,
@@ -625,13 +657,24 @@ def _neo4j_docker_status() -> dict:
             "exists": False,
             "running": False,
             "config": cfg,
-            "neo4j_reachable": reachable,
+            "neo4j_reachable": False,
             "error": "daemon docker actif mais accès au socket refusé (ajoute l'utilisateur au groupe docker, puis reconnecte la session)",
         }
 
     name = cfg["container_name"]
     inspect = _run_cmd(["docker", "inspect", name], timeout=8)
     if not inspect.get("ok"):
+        if reachable:
+            return {
+                "ok": True,
+                "docker_available": True,
+                "daemon_running": True,
+                "docker_access": True,
+                "exists": True,
+                "running": True,
+                "config": cfg,
+                "neo4j_reachable": True,
+            }
         return {
             "ok": True,
             "docker_available": True,
@@ -838,7 +881,7 @@ def _run_cmd(args: list[str], timeout: int = 8) -> dict:
     """Run a command safely and capture output for diagnostics."""
     try:
         p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
-        out = (p.stdout or p.stderr or "").strip()
+        out = ((p.stdout or "") + "\n" + (p.stderr or "")).strip()
         return {"ok": p.returncode == 0, "code": p.returncode, "output": out}
     except FileNotFoundError:
         return {"ok": False, "code": None, "output": "commande introuvable"}

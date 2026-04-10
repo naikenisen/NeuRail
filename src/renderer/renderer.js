@@ -626,13 +626,13 @@ function toggleSettingsSection(id) {
 
 function switchSettingsTab(tabKey, btn = null) {
     const key = (tabKey || 'general').trim();
-    document.querySelectorAll('.stg-nav-item').forEach((b) => {
+    document.querySelectorAll('.settings-fs-nav-item').forEach((b) => {
         b.classList.toggle('active', b.dataset.settingsTab === key);
     });
-    document.querySelectorAll('.stg-panel').forEach((panel) => {
+    document.querySelectorAll('.settings-fs-tab').forEach((panel) => {
         panel.classList.toggle('active', panel.id === `settings-tab-${key}`);
     });
-    if (key === 'infra') {
+    if (key === 'data') {
         loadNeo4jDockerConfig();
         refreshNeo4jDockerStatus();
     }
@@ -808,9 +808,8 @@ function applyNeo4jDockerConfigToForm(cfg = {}) {
 }
 
 function renderNeo4jDockerStatus(status = {}) {
-    const el = document.getElementById('neo4jDockerStatus');
-    if (!el) return;
     neo4jDockerLastStatus = status;
+    const el = document.getElementById('neo4jDockerStatus');
 
     const exists = !!status.exists;
     const running = !!status.running;
@@ -848,23 +847,21 @@ function renderNeo4jDockerStatus(status = {}) {
         html += `<div class="stg-status-alert" style="border-color:rgba(251,191,36,0.4)"><strong style="color:#fbbf24">⚠ ${esc(String(status.error))}</strong><br>Exécute: <code>sudo usermod -aG docker $USER</code> puis déconnecte/reconnecte la session.</div>`;
     } else if (hasError) {
         html += `<div class="stg-status-alert" style="border-color:rgba(248,113,113,0.3)"><strong style="color:#f87171">⚠ ${esc(String(status.error))}</strong></div>`;
-    } else if (reachable && !running) {
-        html += `<div class="stg-status-alert">Neo4j semble tourner en dehors de Docker (port Bolt ouvert).</div>`;
+    } else if (!dockerAccess && reachable) {
+        html += `<div class="stg-status-alert" style="border-color:rgba(251,191,36,0.3)">Accès Docker limité — Neo4j fonctionne. Pour gérer le conteneur depuis l'app: <code>sudo usermod -aG docker $USER</code> puis reconnexion.</div>`;
     }
 
     if (actionError) {
         html += `<div class="stg-status-alert" style="border-color:rgba(248,113,113,0.3)"><strong style="color:#f87171">Dernière action échouée:</strong><br>${esc(actionError)}</div>`;
     }
 
-    el.innerHTML = html;
+    if (el) el.innerHTML = html;
     renderNeo4jQuickAssistant(status);
 }
 
 function renderNeo4jQuickAssistant(status = {}) {
     const hero = document.getElementById('neo4jQuickState');
-    const checklist = document.getElementById('neo4jQuickChecklist');
-    const conflictActions = document.getElementById('neo4jConflictActions');
-    if (!hero || !checklist || !conflictActions) return;
+    if (!hero) return;
 
     const dockerOk = !!status.docker_available;
     const daemonOk = !!status.daemon_running;
@@ -881,7 +878,13 @@ function renderNeo4jQuickAssistant(status = {}) {
     if (ready) {
         toneCls = 'is-ok';
         title = 'Neo4j prêt';
-        subtitle = 'La base répond et le conteneur est en cours d\'exécution.';
+        subtitle = !accessOk
+            ? 'Neo4j répond. Gestion Docker limitée (permissions socket).'
+            : 'La base répond et le conteneur est en cours d\'exécution.';
+    } else if (reachable) {
+        toneCls = 'is-ok';
+        title = 'Neo4j prêt';
+        subtitle = 'Le port Bolt répond. Neo4j est accessible.';
     } else if (!dockerOk) {
         toneCls = 'is-ko';
         title = 'Docker manquant';
@@ -894,31 +897,10 @@ function renderNeo4jQuickAssistant(status = {}) {
         toneCls = 'is-warn';
         title = 'Accès Docker refusé';
         subtitle = 'Ajoute l\'utilisateur au groupe docker puis reconnecte la session.';
-    } else if (reachable && !running) {
-        toneCls = 'is-warn';
-        title = 'Neo4j externe détecté';
-        subtitle = 'Le port Bolt est déjà ouvert hors du conteneur configuré.';
     }
 
     hero.className = `stg-neo4j-hero ${toneCls}`;
     hero.innerHTML = `<div class="stg-neo4j-hero-title">${esc(title)}</div><div class="stg-neo4j-hero-sub">${esc(subtitle)}</div>`;
-
-    const lines = [
-        { ok: dockerOk, label: 'Docker installé' },
-        { ok: daemonOk, label: 'Daemon Docker actif' },
-        { ok: accessOk, label: 'Accès socket Docker' },
-        { ok: running, label: 'Conteneur neurail-neo4j en cours d\'exécution' },
-        { ok: reachable, label: 'Port Bolt joignable' },
-    ];
-
-    checklist.innerHTML = lines.map((line) => `
-        <div class="stg-neo4j-check ${line.ok ? 'ok' : 'ko'}">
-            <span class="stg-neo4j-dot"></span>
-            <span>${esc(line.label)}</span>
-        </div>
-    `).join('');
-
-    conflictActions.innerHTML = '';
 }
 
 function getCurrentNeo4jDockerFormConfig() {
@@ -961,7 +943,7 @@ async function saveNeo4jDockerConfig() {
 async function refreshNeo4jDockerStatus() {
     try {
         const data = await getNeo4jDockerStatus();
-        // Render status even if there's a soft error (e.g. daemon not running)
+        if (data.neo4j_reachable) neo4jDockerLastActionError = '';
         renderNeo4jDockerStatus(data);
     } catch (e) {
         const el = document.getElementById('neo4jDockerStatus');
@@ -1129,10 +1111,15 @@ async function changeNeo4jDockerPassword() {
 }
 
 function saveMailToolsSettings() {
-    const input = document.getElementById('geminiKeyInput');
+    const input = document.getElementById('settingGeminiApiInput');
     state.settings.geminiKey = (input?.value || '').trim();
     autoSave();
-    showToast('Cle Gemini sauvegardee.', 'success');
+    showToast('Clé Gemini sauvegardée.', 'success');
+}
+
+async function saveAISettings() {
+    saveMailToolsSettings();
+    await saveInstallLocalSettings();
 }
 
 function applyThemeMode(mode) {

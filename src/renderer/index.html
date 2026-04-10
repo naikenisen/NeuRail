@@ -464,119 +464,192 @@
     </div>
 </div>
 
-<!-- Settings Modal -->
-<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
-    <div class="modal settings-modal-wide">
-        <div class="stg-layout">
-            <!-- Sidebar Nav -->
-            <nav class="stg-nav">
-                <div class="stg-nav-title"><i class="icon-settings"></i> Paramètres</div>
-                <button class="stg-nav-item active" data-settings-tab="general" onclick="switchSettingsTab('general', this)">
+<!-- Settings Panel (fullscreen) ──────────────── -->
+<div class="settings-fs-overlay" id="settingsModal">
+    <div class="settings-fs">
+        <header class="settings-fs-header">
+            <div class="settings-fs-brand">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <h1>Paramètres</h1>
+            </div>
+            <button class="settings-fs-close" onclick="closeSettings()" title="Fermer les paramètres">
+                <i class="icon-x"></i>
+            </button>
+        </header>
+
+        <div class="settings-fs-body">
+            <nav class="settings-fs-nav">
+                <button class="settings-fs-nav-item active" data-settings-tab="general" onclick="switchSettingsTab('general', this)">
                     <i class="icon-sliders-horizontal"></i><span>Général</span>
                 </button>
-                <button class="stg-nav-item" data-settings-tab="services" onclick="switchSettingsTab('services', this)">
-                    <i class="icon-sparkles"></i><span>Services &amp; IA</span>
+                <button class="settings-fs-nav-item" data-settings-tab="ai" onclick="switchSettingsTab('ai', this)">
+                    <i class="icon-sparkles"></i><span>Intelligence Artificielle</span>
                 </button>
-                <button class="stg-nav-item" data-settings-tab="infra" onclick="switchSettingsTab('infra', this)">
-                    <i class="icon-server"></i><span>Infrastructure</span>
-                </button>
-                <button class="stg-nav-item" data-settings-tab="system" onclick="switchSettingsTab('system', this)">
-                    <i class="icon-cpu"></i><span>Système</span>
+                <button class="settings-fs-nav-item" data-settings-tab="data" onclick="switchSettingsTab('data', this)">
+                    <i class="icon-database"></i><span>Données &amp; Stockage</span>
                 </button>
             </nav>
 
-            <!-- Content Area -->
-            <div class="stg-content">
+            <main class="settings-fs-main">
 
-                <!-- ── Tab: Général ── -->
-                <section class="stg-panel active" id="settings-tab-general">
-                    <h3 class="stg-heading">Général</h3>
+                <!-- ── Général ────────────────────── -->
+                <section class="settings-fs-tab active" id="settings-tab-general">
+                    <h2 class="settings-fs-title">Général</h2>
 
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Apparence</strong><p>Personnalisation visuelle de l'interface</p></div>
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-palette"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Apparence</h3>
+                                <p>Choisissez le thème de l'application</p>
+                            </div>
                         </div>
-                        <div class="stg-card-body">
-                            <div class="stg-field-row">
-                                <div class="stg-field-info">
-                                    <label>Thème</label>
-                                    <span>Basculer entre mode sombre et mode clair</span>
+                        <div class="stg-section-body">
+                            <div class="stg-toggle-row">
+                                <div>
+                                    <strong>Thème de l'interface</strong>
+                                    <span>Basculer entre le mode sombre et le mode clair</span>
                                 </div>
                                 <button onclick="toggleThemeMode()" id="themeToggleBtn" class="stg-btn stg-btn-ghost"><i class="icon-sun"></i> Mode clair</button>
                             </div>
                         </div>
                     </div>
 
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Comptes mail</strong><p>Configuration POP3, IMAP, SMTP et Gmail OAuth 2.0</p></div>
-                            <button onclick="openAccountsModal();closeSettings()" class="stg-btn stg-btn-ghost"><i class="icon-user"></i> Gérer</button>
-                        </div>
-                    </div>
-
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Identifiants web</strong><p>Trousseau chiffré pour les onglets intégrés (GitHub, Google, ENT…)</p></div>
-                            <button onclick="openManageCredentialsModal();closeSettings()" class="stg-btn stg-btn-ghost"><i class="icon-key-round"></i> Gérer</button>
-                        </div>
-                    </div>
-
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Annuaire de contacts</strong><p>Importer un fichier CSV (Display Name, First Name, Last Name, Primary Email)</p></div>
-                        </div>
-                        <div class="stg-card-body">
-                            <div class="stg-field-row">
-                                <input type="file" id="contactsCsvInput" class="stg-file-input" accept=".csv">
-                                <button onclick="importContactsCsv()" class="stg-btn stg-btn-primary">Importer</button>
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-mail"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Comptes mail</h3>
+                                <p>Configurez vos comptes de messagerie (POP3, IMAP, Gmail)</p>
                             </div>
-                            <small id="contactsCount" class="stg-hint"></small>
+                            <button onclick="openAccountsModal();closeSettings()" class="stg-btn stg-btn-ghost"><i class="icon-settings"></i> Configurer</button>
+                        </div>
+                    </div>
+
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-key-round"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Identifiants web</h3>
+                                <p>Mots de passe sauvegardés pour les sites intégrés</p>
+                            </div>
+                            <button onclick="openManageCredentialsModal();closeSettings()" class="stg-btn stg-btn-ghost"><i class="icon-settings"></i> Gérer</button>
+                        </div>
+                    </div>
+
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-users"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Contacts</h3>
+                                <p>Importez vos contacts depuis un fichier CSV</p>
+                            </div>
+                        </div>
+                        <div class="stg-section-body">
+                            <div class="stg-file-row">
+                                <input type="file" id="contactsCsvInput" class="stg-file-input" accept=".csv">
+                                <button onclick="importContactsCsv()" class="stg-btn stg-btn-primary"><i class="icon-upload"></i> Importer</button>
+                            </div>
+                            <span id="contactsCount" class="stg-hint"></span>
                         </div>
                     </div>
                 </section>
 
-                <!-- ── Tab: Services & IA ── -->
-                <section class="stg-panel" id="settings-tab-services">
-                    <h3 class="stg-heading">Services &amp; IA</h3>
+                <!-- ── Intelligence Artificielle ──── -->
+                <section class="settings-fs-tab" id="settings-tab-ai">
+                    <h2 class="settings-fs-title">Intelligence Artificielle</h2>
 
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Gemini</strong><p>Clé API et modèles pour la reformulation et la génération</p></div>
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-sparkles"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Clé API</h3>
+                                <p>Nécessaire pour la reformulation de mails et les réponses IA</p>
+                            </div>
                         </div>
-                        <div class="stg-card-body">
+                        <div class="stg-section-body">
                             <div class="stg-field">
                                 <label>Clé API Gemini</label>
-                                <input type="password" id="geminiKeyInput" placeholder="AIza..." class="stg-input">
-                            </div>
-                            <div class="stg-field">
-                                <label>Clé API (config locale)</label>
                                 <input type="password" id="settingGeminiApiInput" class="stg-input" placeholder="AIza...">
-                                <span class="stg-hint">Stockée dans ~/.local/share/isenapp/.env</span>
+                                <span class="stg-hint">Obtenez votre clé sur <strong>aistudio.google.com</strong></span>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-cpu"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Modèles IA</h3>
+                                <p>Choix des modèles pour la génération de texte et l'indexation</p>
+                            </div>
+                        </div>
+                        <div class="stg-section-body">
                             <div class="stg-field-group">
                                 <div class="stg-field">
                                     <label>Modèle principal</label>
                                     <input type="text" id="settingGeminiModelInput" class="stg-input" placeholder="gemma-3-27b-it">
                                 </div>
                                 <div class="stg-field">
-                                    <label>Modèles fallback (CSV)</label>
+                                    <label>Modèle de secours</label>
                                     <input type="text" id="settingGeminiFallbackInput" class="stg-input" placeholder="gemini-2.5-flash">
                                 </div>
                             </div>
                             <div class="stg-field">
-                                <label>Modèle d'embedding</label>
+                                <label>Modèle d'indexation</label>
                                 <input type="text" id="settingEmbeddingModelInput" class="stg-input" placeholder="intfloat/multilingual-e5-base">
+                                <span class="stg-hint">Utilisé pour la recherche sémantique dans vos mails</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Neo4j (connexion)</strong><p>Paramètres de connexion à la base de graphe</p></div>
+                    <div class="stg-save-bar">
+                        <button onclick="saveAISettings()" class="stg-btn stg-btn-primary stg-btn-lg"><i class="icon-save"></i> Sauvegarder</button>
+                    </div>
+                </section>
+
+                <!-- ── Données & Stockage ─────────── -->
+                <section class="settings-fs-tab" id="settings-tab-data">
+                    <h2 class="settings-fs-title">Données &amp; Stockage</h2>
+
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-folder"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Dossiers</h3>
+                                <p>Emplacements de stockage de vos mails et documents</p>
+                            </div>
                         </div>
-                        <div class="stg-card-body">
+                        <div class="stg-section-body">
                             <div class="stg-field">
-                                <label>URI</label>
+                                <label>Dossier des mails</label>
+                                <input type="text" id="settingMailsDirInput" class="stg-input" placeholder="/home/user/mails">
+                            </div>
+                            <div class="stg-field">
+                                <label>Dossier des documents</label>
+                                <input type="text" id="settingVaultDirInput" class="stg-input" placeholder="/home/user/Documents/isenapp_mails">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-database"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Base de données Neo4j</h3>
+                                <p>Connexion et état de la base de données</p>
+                            </div>
+                            <button onclick="refreshNeo4jDockerStatus()" class="stg-btn stg-btn-ghost stg-btn-sm"><i class="icon-refresh-cw"></i> Actualiser</button>
+                        </div>
+                        <div class="stg-section-body">
+                            <div id="neo4jQuickState" class="stg-neo4j-hero">Chargement…</div>
+                            <div class="stg-actions-bar" style="margin-top:.75rem">
+                                <button id="neo4jActivateBtn" onclick="activateNeo4jGuided()" class="stg-btn stg-btn-primary"><i class="icon-play"></i> Démarrer</button>
+                                <button onclick="neo4jDockerAction('restart')" class="stg-btn stg-btn-ghost"><i class="icon-rotate-cw"></i> Redémarrer</button>
+                                <button onclick="neo4jDockerAction('stop')" class="stg-btn stg-btn-ghost"><i class="icon-square"></i> Arrêter</button>
+                            </div>
+                            <div class="stg-field" style="margin-top:1.25rem">
+                                <label>Adresse du serveur</label>
                                 <input type="text" id="settingNeo4jUriInput" class="stg-input" placeholder="bolt://localhost:7687">
                             </div>
                             <div class="stg-field-group">
@@ -592,110 +665,15 @@
                         </div>
                     </div>
 
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Chemins locaux</strong><p>Dossiers de stockage sur cette machine</p></div>
-                        </div>
-                        <div class="stg-card-body">
-                            <div class="stg-field">
-                                <label>Dossier mails (.eml)</label>
-                                <input type="text" id="settingMailsDirInput" class="stg-input" placeholder="/home/user/mails">
-                            </div>
-                            <div class="stg-field">
-                                <label>Dossier vault</label>
-                                <input type="text" id="settingVaultDirInput" class="stg-input" placeholder="/home/user/Documents/isenapp_mails">
+                    <div class="stg-section">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-key-round"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Changer le mot de passe</h3>
+                                <p>Modifier le mot de passe de la base de données Neo4j</p>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="stg-actions-bar">
-                        <button onclick="saveInstallLocalSettings()" class="stg-btn stg-btn-primary"><i class="icon-save"></i> Sauvegarder tout</button>
-                        <button onclick="saveMailToolsSettings()" class="stg-btn stg-btn-ghost"><i class="icon-save"></i> Sauvegarder clé IA (interface)</button>
-                    </div>
-
-                    <div class="stg-card stg-card-muted">
-                        <div class="stg-card-header">
-                            <div><strong>Fichiers de configuration</strong><p>Éléments stockés hors .deb (créés automatiquement)</p></div>
-                        </div>
-                        <div class="stg-card-body">
-                            <div id="installStorageList" class="install-storage-list"></div>
-                            <span class="stg-hint">Un redémarrage est requis après modification.</span>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- ── Tab: Infrastructure ── -->
-                <section class="stg-panel" id="settings-tab-infra">
-                    <h3 class="stg-heading">Infrastructure</h3>
-
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Assistant Neo4j</strong><p>Diagnostiquer et activer Neo4j en un clic</p></div>
-                            <button onclick="refreshNeo4jDockerStatus()" class="stg-btn stg-btn-ghost stg-btn-sm"><i class="icon-refresh-cw"></i> Actualiser</button>
-                        </div>
-                        <div class="stg-card-body">
-                            <div id="neo4jQuickState" class="stg-neo4j-hero">État non chargé.</div>
-                            <div class="stg-actions-bar" style="margin-top:.55rem">
-                                <button id="neo4jActivateBtn" onclick="activateNeo4jGuided()" class="stg-btn stg-btn-primary"><i class="icon-play"></i> Activer Neo4j</button>
-                                <button onclick="neo4jDockerAction('restart')" class="stg-btn stg-btn-ghost"><i class="icon-rotate-cw"></i> Redémarrer</button>
-                                <button onclick="neo4jDockerAction('stop')" class="stg-btn stg-btn-ghost"><i class="icon-square"></i> Arrêter</button>
-                            </div>
-                            <div id="neo4jQuickChecklist" class="stg-neo4j-checklist"></div>
-                            <div id="neo4jConflictActions" class="stg-actions-bar stg-neo4j-conflicts"></div>
-                            <div class="stg-hint">Le mot de passe Neo4j est lu depuis Général > Neo4j (connexion).</div>
-                        </div>
-                    </div>
-
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Détails techniques</strong><p>État brut Docker/Neo4j (diagnostic détaillé)</p></div>
-                        </div>
-                        <div class="stg-card-body">
-                            <div id="neo4jDockerStatus" class="stg-status-grid">Statut non chargé.</div>
-                        </div>
-                    </div>
-
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Configuration conteneur</strong><p>Caractéristiques fixes du conteneur Neo4j</p></div>
-                        </div>
-                        <div class="stg-card-body">
-                            <div class="stg-field-group">
-                                <div class="stg-field">
-                                    <label>Conteneur</label>
-                                    <input type="text" id="neo4jDockerContainerInput" class="stg-input" value="neurail-neo4j" readonly disabled>
-                                </div>
-                                <div class="stg-field">
-                                    <label>Image</label>
-                                    <input type="text" id="neo4jDockerImageInput" class="stg-input" value="neo4j:latest" readonly disabled>
-                                </div>
-                            </div>
-                            <div class="stg-field">
-                                <label>Volume</label>
-                                <input type="text" id="neo4jDockerVolumeInput" class="stg-input" value="neurail-neo4j-data" readonly disabled>
-                            </div>
-                            <div class="stg-field-group">
-                                <div class="stg-field">
-                                    <label>Port Bolt</label>
-                                    <input type="number" id="neo4jDockerBoltPortInput" class="stg-input" value="7687" readonly disabled>
-                                </div>
-                                <div class="stg-field">
-                                    <label>Port HTTP</label>
-                                    <input type="number" id="neo4jDockerHttpPortInput" class="stg-input" value="7474" readonly disabled>
-                                </div>
-                            </div>
-                            <div class="stg-actions-bar" style="margin-top:.6rem">
-                                <button onclick="neo4jDockerAction('start-daemon')" class="stg-btn stg-btn-ghost stg-btn-sm"><i class="icon-play"></i> Démarrer le daemon Docker</button>
-                                <button onclick="neo4jDockerReinstall()" class="stg-btn stg-btn-danger stg-btn-sm"><i class="icon-trash-2"></i> Réinstaller</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Mot de passe Neo4j</strong><p>Modifier le mot de passe de la base</p></div>
-                        </div>
-                        <div class="stg-card-body">
+                        <div class="stg-section-body">
                             <div class="stg-field-group">
                                 <div class="stg-field">
                                     <label>Mot de passe actuel</label>
@@ -703,47 +681,33 @@
                                 </div>
                                 <div class="stg-field">
                                     <label>Nouveau mot de passe</label>
-                                    <input type="password" id="neo4jNewPasswordInput" class="stg-input" placeholder="min. 8 caractères">
+                                    <input type="password" id="neo4jNewPasswordInput" class="stg-input" placeholder="Minimum 8 caractères">
                                 </div>
                             </div>
-                            <div class="stg-actions-bar" style="margin-top:.6rem">
-                                <button onclick="changeNeo4jDockerPassword()" class="stg-btn stg-btn-primary stg-btn-sm"><i class="icon-key-round"></i> Modifier</button>
+                            <div class="stg-actions-bar">
+                                <button onclick="changeNeo4jDockerPassword()" class="stg-btn stg-btn-primary"><i class="icon-key-round"></i> Modifier</button>
                             </div>
                         </div>
                     </div>
-                </section>
 
-                <!-- ── Tab: Système ── -->
-                <section class="stg-panel" id="settings-tab-system">
-                    <h3 class="stg-heading">Système</h3>
-
-                    <div class="stg-card">
-                        <div class="stg-card-header">
-                            <div><strong>Diagnostic</strong><p>Vérification des prérequis et de l'environnement</p></div>
-                            <button onclick="runSystemDiagnostics()" class="stg-btn stg-btn-primary stg-btn-sm"><i class="icon-activity"></i> Lancer</button>
-                        </div>
-                        <div class="stg-card-body">
-                            <div id="systemDiagResults" class="stg-diag-results"></div>
-                        </div>
+                    <div class="stg-save-bar">
+                        <button onclick="saveInstallLocalSettings()" class="stg-btn stg-btn-primary stg-btn-lg"><i class="icon-save"></i> Sauvegarder</button>
+                        <span class="stg-hint" style="align-self:center;margin-left:.75rem">Un redémarrage peut être nécessaire</span>
                     </div>
 
-                    <div class="stg-card stg-card-muted">
-                        <div class="stg-card-header">
-                            <div><strong>Installation .deb</strong><p>Conseils pour l'installation via paquet Debian</p></div>
-                        </div>
-                        <div class="stg-card-body">
-                            <p class="stg-hint" style="margin:0;line-height:1.55">
-                                Préférer <code>sudo apt install ./NeuRail.deb</code> pour résoudre automatiquement les dépendances.<br>
-                                Avec <code>dpkg -i</code>, terminer par <code>sudo apt install -f</code>.
-                            </p>
+                    <div class="stg-section stg-section-danger">
+                        <div class="stg-section-header">
+                            <div class="stg-section-icon"><i class="icon-alert-triangle"></i></div>
+                            <div class="stg-section-text">
+                                <h3>Réinstaller la base de données</h3>
+                                <p>Supprime le conteneur Neo4j et recrée une base vide</p>
+                            </div>
+                            <button onclick="neo4jDockerReinstall()" class="stg-btn stg-btn-danger"><i class="icon-trash-2"></i> Réinstaller</button>
                         </div>
                     </div>
                 </section>
-            </div>
-        </div>
 
-        <div class="stg-footer">
-            <button onclick="closeSettings()" class="stg-btn stg-btn-ghost">Fermer</button>
+            </main>
         </div>
     </div>
 </div>
