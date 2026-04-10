@@ -106,10 +106,7 @@ npm start
 NeuRail utilise [electron-builder](https://www.electron.build/) pour le packaging. Les artefacts sont générés dans le dossier `dist/`.
 
 ```bash
-# Debian / Ubuntu — AppImage + .deb
-npm run build
-
-# Arch Linux — AppImage + .deb
+# Linux (Debian, Ubuntu, Arch, …) — AppImage + .deb
 npm run build
 
 # macOS — .dmg + .zip
@@ -124,9 +121,11 @@ npm run build:all
 
 | Plateforme | Formats générés |
 |---|---|
-| Linux (Debian, Arch, …) | AppImage, `.deb` |
+| Linux | AppImage (universel), `.deb` |
 | macOS | `.dmg`, `.zip` |
 | Windows | NSIS installer, Portable |
+
+> **Note Linux :** L'AppImage fonctionne sur toutes les distributions (Debian, Arch, Fedora, …). Le paquet `.deb` est destiné aux distributions basées sur Debian/Ubuntu.
 
 ---
 
@@ -139,15 +138,15 @@ cp .env.example .env   # Linux / macOS
 # copy .env.example .env  # Windows (cmd)
 ```
 
-| Variable | Description |
-|---|---|
-| `NEO4J_URI` | URI de connexion Neo4j (ex. `bolt://localhost:7687`) |
-| `NEO4J_USER` | Nom d'utilisateur Neo4j |
-| `NEO4J_PASSWORD` | Mot de passe Neo4j |
-| `GEMINI_API_KEY` | Clé API Google Gemini pour les fonctionnalités IA |
-| `GEMINI_MODEL` | Modèle Gemini principal (optionnel) |
-| `GEMINI_FALLBACK_MODELS` | Modèles de secours Gemini (optionnel, séparés par des virgules) |
-| `EMBEDDING_MODEL` | Modèle d'embedding (optionnel) |
+| Variable | Description | Requis |
+|---|---|---|
+| `NEO4J_URI` | URI de connexion Neo4j (ex. `bolt://localhost:7687`) | Oui |
+| `NEO4J_USER` | Nom d'utilisateur Neo4j | Oui |
+| `NEO4J_PASSWORD` | Mot de passe Neo4j | Oui |
+| `GEMINI_API_KEY` | Clé API Google Gemini pour les fonctionnalités IA | Oui |
+| `GEMINI_MODEL` | Modèle Gemini principal | Non |
+| `GEMINI_FALLBACK_MODELS` | Modèles de secours Gemini (séparés par des virgules) | Non |
+| `EMBEDDING_MODEL` | Modèle d'embedding | Non |
 
 ---
 
