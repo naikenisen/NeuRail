@@ -273,7 +273,8 @@ def _extract_text_from_attachment(filepath: str) -> str:
                     parts.append(text)
             return "\n".join(parts)
 
-    except Exception:
+    except Exception as e:
+        logging.warning("Erreur extraction texte de %s: %s", filepath, e)
         return ""
     return ""
 
