@@ -224,7 +224,7 @@ function renderSections() {
 function getPriorityColor(index, total) {
     if (total <= 1) return '#6c8aff';
     const ratio = index / (total - 1);
-    // Red (urgent) → Orange → Yellow → Green (less urgent)
+    // Red (urgent) → Orange → Green → Blue (less urgent)
     if (ratio <= 0.33) {
         const t = ratio / 0.33;
         const r = Math.round(239 + (245 - 239) * t);
