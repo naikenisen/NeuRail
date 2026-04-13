@@ -1117,6 +1117,8 @@
         .original-mail-body {
             min-height: 180px;
             opacity: 0.9;
+            border-left: 3px solid var(--accent-blue);
+            background: var(--bg-surface);
         }
         .signature-preview-label {
             color: var(--text-muted);

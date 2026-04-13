@@ -1337,7 +1337,14 @@ function setReplyComposerContext(context) {
 
     if (composerReplyContext) {
         if (promptField) promptField.style.display = '';
-        if (originalField) originalField.style.display = '';
+        if (originalField) {
+            originalField.style.display = '';
+            const label = originalField.querySelector('label');
+            if (label) {
+                label.textContent = composerReplyContext.type === 'forward'
+                    ? 'Mail transféré (figé)' : 'Message original (figé)';
+            }
+        }
         if (generateBtn) generateBtn.style.display = '';
         if (originalBody) originalBody.value = composerReplyContext.originalText || '';
         if (promptInput && !promptInput.value.trim()) promptInput.value = 'Réponse professionnelle, claire et concise.';
@@ -1352,7 +1359,21 @@ function setReplyComposerContext(context) {
 
 function getQuotedOriginalText(context = composerReplyContext) {
     if (!context || !context.originalText) return '';
-    return '\n\n--- Le ' + (context.date || '') + ', ' + (context.from || '') + ' a écrit :\n' + context.originalText;
+    if (context.type === 'forward') {
+        const lines = context.originalText.split('\n');
+        return '\n\n' + lines.map(l => l ? '> ' + l : '>').join('\n');
+    }
+    const header = 'Le ' + (context.date || '') + ', ' + (context.from || '') + ' a écrit :';
+    const lines = context.originalText.split('\n');
+    return '\n\n> ' + header + '\n>\n' + lines.map(l => l ? '> ' + l : '>').join('\n');
+}
+
+function getQuoteTextForHtml(context = composerReplyContext) {
+    if (!context || !context.originalText) return '';
+    if (context.type === 'forward') {
+        return context.originalText;
+    }
+    return 'Le ' + (context.date || '') + ', ' + (context.from || '') + ' a écrit :\n\n' + context.originalText;
 }
 
 function getComposerFinalBodyText() {
@@ -1436,7 +1457,7 @@ async function saveMailEml() {
     if (!to || !subject) { showToast('Remplis le(s) destinataire(s) et le sujet.', 'error'); return; }
     const signatureHtml = getActiveSignatureHtml();
     const html_body = signatureHtml
-        ? buildHtmlBodyWithOptionalQuote(document.getElementById('mailBody').value.trim(), signatureHtml, getQuotedOriginalText())
+        ? buildHtmlBodyWithOptionalQuote(document.getElementById('mailBody').value.trim(), signatureHtml, getQuoteTextForHtml())
         : null;
     try {
         const r = await fetch('/api/save-eml', {
@@ -2489,7 +2510,8 @@ function replyToMail(mailId, replyAll) {
     setReplyComposerContext({
         originalText: mail.body || '',
         date: mail.date || '',
-        from: mail.from_name || mail.from_email || ''
+        from: mail.from_name || mail.from_email || '',
+        type: 'reply'
     });
     // Try to match account
     const fromSel = document.getElementById('mailFrom');
@@ -2508,20 +2530,25 @@ function forwardMail(mailId) {
     selectedMailTask = null;
     updateMailComposerState();
     renderMailList();
-    setReplyComposerContext(null);
     mailRecipients = [];
     mailCcRecipients = [];
     renderMailTags();
     renderCcTags();
     document.getElementById('mailSubject').value = 'Fwd: ' + (mail.subject || '').replace(/^Fwd:\s*/i, '');
-    const fwdBody = '\n\n--- Mail transféré ---\n'
+    const fwdBody = '--- Mail transféré ---\n'
         + 'De : ' + (mail.from_name || '') + ' <' + (mail.from_email || '') + '>\n'
         + 'Date : ' + (mail.date || '') + '\n'
         + 'À : ' + (mail.to || '') + '\n'
         + (mail.cc ? 'Cc : ' + mail.cc + '\n' : '')
         + 'Sujet : ' + (mail.subject || '') + '\n\n'
         + (mail.body || '');
-    document.getElementById('mailBody').value = fwdBody;
+    document.getElementById('mailBody').value = '';
+    setReplyComposerContext({
+        originalText: fwdBody,
+        date: mail.date || '',
+        from: mail.from_name || mail.from_email || '',
+        type: 'forward'
+    });
     document.getElementById('mailToInput').focus();
 }
 
@@ -3073,7 +3100,7 @@ async function sendMailSMTP() {
 
     const signatureHtml = getActiveSignatureHtml();
     const html_body = signatureHtml
-        ? buildHtmlBodyWithOptionalQuote(document.getElementById('mailBody').value.trim(), signatureHtml, getQuotedOriginalText())
+        ? buildHtmlBodyWithOptionalQuote(document.getElementById('mailBody').value.trim(), signatureHtml, getQuoteTextForHtml())
         : null;
 
     showLoading('Envoi du mail via SMTP…');
