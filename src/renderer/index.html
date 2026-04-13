@@ -29,6 +29,7 @@
             <button class="tab-btn" data-tab="mail" onclick="switchTab('mail')"><i class="icon-send"></i> Rédiger</button>
             <button class="tab-btn" data-tab="mailchat" onclick="switchTab('mailchat')"><i class="icon-sparkles"></i> MailChat</button>
             <button class="tab-btn" data-tab="archive" onclick="switchTab('archive')"><i class="icon-archive"></i> Archive</button>
+            <button class="tab-btn" data-tab="annuaire" onclick="switchTab('annuaire')"><i class="icon-users"></i> Annuaire</button>
         </div>
         <div class="tab-bar-scroll" id="siteTabButtons"></div>
         <button class="tab-btn tab-btn-add-site tab-btn-add-site-accent" onclick="openAddSiteModal()" title="Ajouter un site"><i class="icon-plus"></i></button>
@@ -428,6 +429,38 @@
             </div>
             <div class="archive-list" id="archiveList">
                 <div class="chatbot-welcome"><p>Chargement des archives…</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANNUAIRE TAB -->
+    <div class="tab-content" id="tab-annuaire">
+        <div class="annuaire-container">
+            <div class="annuaire-header">
+                <div class="annuaire-title"><i class="icon-users"></i> Annuaire</div>
+                <span class="annuaire-count" id="annuaireCount"></span>
+            </div>
+            <div class="annuaire-toolbar">
+                <div class="annuaire-search-wrap">
+                    <i class="icon-search"></i>
+                    <input type="text" id="annuaireSearch" placeholder="Rechercher un nom ou email…" oninput="filterAnnuaire()">
+                </div>
+                <div class="annuaire-source-filters">
+                    <button class="annuaire-chip active" data-source="all" onclick="setAnnuaireSource('all')">Tous</button>
+                    <button class="annuaire-chip" data-source="import" onclick="setAnnuaireSource('import')">Importés</button>
+                    <button class="annuaire-chip" data-source="mail" onclick="setAnnuaireSource('mail')">Mails</button>
+                </div>
+            </div>
+            <div class="annuaire-layout">
+                <div class="annuaire-list" id="annuaireList">
+                    <div class="chatbot-welcome"><p>Chargement de l'annuaire…</p></div>
+                </div>
+                <div class="annuaire-detail" id="annuaireDetail">
+                    <div class="annuaire-detail-empty">
+                        <i class="icon-user annuaire-empty-icon"></i>
+                        <p>Sélectionnez un contact pour voir ses détails</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

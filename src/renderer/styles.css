@@ -2531,6 +2531,13 @@
         #tab-archive.active {
             display: block;
         }
+        #tab-annuaire {
+            height: calc(100vh - 110px);
+            overflow: hidden;
+        }
+        #tab-annuaire.active {
+            display: block;
+        }
         .archive-container {
             height: 100%;
             display: flex;
@@ -2678,4 +2685,268 @@
             height: 100%;
             color: var(--text-muted);
             font-size: 0.8rem;
+        }
+
+        /* ─── Annuaire Tab ───────────────────────────── */
+        .annuaire-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            border-radius: 14px;
+            border: 1px solid var(--card-border);
+            box-shadow: 0 14px 40px rgba(2, 6, 23, 0.28);
+            background: var(--bg-surface);
+            overflow: hidden;
+        }
+        .annuaire-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.7rem 0.9rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .annuaire-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .annuaire-count {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+        .annuaire-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.55rem 0.8rem;
+            border-bottom: 1px solid var(--card-border);
+            background: rgba(59, 130, 246, 0.06);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .annuaire-search-wrap {
+            flex: 1;
+            min-width: 180px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.3rem 0.6rem;
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            background: var(--bg);
+            color: var(--text-muted);
+            font-size: 0.76rem;
+        }
+        .annuaire-search-wrap input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font-size: 0.76rem;
+            font-family: inherit;
+            outline: none;
+        }
+        .annuaire-search-wrap input::placeholder {
+            color: var(--text-muted);
+        }
+        .annuaire-source-filters {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+        }
+        .annuaire-chip {
+            border: 1px solid var(--card-border);
+            border-radius: 999px;
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            padding: 0.26rem 0.62rem;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            font-family: inherit;
+        }
+        .annuaire-chip.active,
+        .annuaire-chip:hover {
+            color: var(--text);
+            border-color: var(--accent-blue);
+            background: rgba(59, 130, 246, 0.15);
+        }
+        .annuaire-layout {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .annuaire-list {
+            width: 380px;
+            min-width: 280px;
+            border-right: 1px solid var(--card-border);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            display: flex;
+            flex-direction: column;
+        }
+        .annuaire-detail {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+        .annuaire-detail-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            gap: 0.5rem;
+        }
+        .annuaire-empty-icon {
+            font-size: 2.5rem;
+            opacity: 0.4;
+        }
+        .annuaire-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.55rem 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid var(--card-border);
+            transition: background 0.15s;
+        }
+        .annuaire-item:hover {
+            background: rgba(59, 130, 246, 0.06);
+        }
+        .annuaire-item.active {
+            background: rgba(59, 130, 246, 0.12);
+            border-left: 3px solid var(--accent-blue);
+        }
+        .annuaire-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple, #a78bfa));
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .annuaire-avatar-lg {
+            width: 56px;
+            height: 56px;
+            font-size: 1.1rem;
+        }
+        .annuaire-item-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+        }
+        .annuaire-item-name {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .annuaire-item-email {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .annuaire-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            flex-shrink: 0;
+        }
+        .annuaire-badge {
+            font-size: 0.6rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 999px;
+            font-weight: 600;
+        }
+        .annuaire-badge-import {
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--accent-green, #34d399);
+        }
+        .annuaire-badge-mail {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+        }
+        .annuaire-mail-count {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        .annuaire-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            padding: 2rem;
+        }
+        .annuaire-detail-card {
+            max-width: 480px;
+        }
+        .annuaire-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .annuaire-detail-identity h3 {
+            margin: 0 0 0.2rem 0;
+            font-size: 1.1rem;
+            color: var(--text);
+        }
+        .annuaire-detail-email {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        .annuaire-detail-sources {
+            margin-top: 0.35rem;
+            display: flex;
+            gap: 0.3rem;
+        }
+        .annuaire-detail-actions {
+            margin-bottom: 0.8rem;
+        }
+        .annuaire-action-btn {
+            padding: 0.4rem 0.9rem;
+            border: 1px solid var(--accent-blue);
+            border-radius: 8px;
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--accent-blue);
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .annuaire-action-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+        .annuaire-detail-stat {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            padding: 0.5rem 0;
+            border-top: 1px solid var(--card-border);
         }

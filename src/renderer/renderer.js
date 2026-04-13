@@ -71,6 +71,7 @@ function switchTab(tab) {
     if (tab === 'inbox') loadInbox();
     if (tab === 'mailchat') checkChatbotStatus();
     if (tab === 'archive') loadArchiveMails();
+    if (tab === 'annuaire') loadAnnuaire();
     updateSiteTabViewVisibility();
 }
 
@@ -4697,4 +4698,121 @@ function openArchiveMailReader(index) {
         },
         mail.body || '(contenu vide)',
     );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Annuaire Tab
+   ═══════════════════════════════════════════════════════ */
+let annuaireData = [];
+let annuaireFiltered = [];
+let annuaireSource = 'all';
+let annuaireLoaded = false;
+
+async function loadAnnuaire() {
+    if (annuaireLoaded) return;
+    const list = document.getElementById('annuaireList');
+    if (!list) return;
+    list.innerHTML = '<div class="chatbot-welcome"><p>Chargement de l\u2019annuaire…</p></div>';
+    try {
+        const r = await fetch('/api/annuaire');
+        if (!r.ok) throw new Error('Erreur serveur');
+        annuaireData = await r.json();
+        annuaireLoaded = true;
+        filterAnnuaire();
+    } catch (err) {
+        list.innerHTML = `<div class="annuaire-empty">Erreur : ${esc(err.message)}</div>`;
+    }
+}
+
+function setAnnuaireSource(source) {
+    annuaireSource = source || 'all';
+    document.querySelectorAll('.annuaire-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.source === annuaireSource);
+    });
+    filterAnnuaire();
+}
+
+function filterAnnuaire() {
+    const query = (document.getElementById('annuaireSearch')?.value || '').toLowerCase().trim();
+    annuaireFiltered = annuaireData.filter(c => {
+        if (annuaireSource !== 'all' && !(c.sources || []).includes(annuaireSource)) return false;
+        if (!query) return true;
+        return (c.name || '').toLowerCase().includes(query) || (c.email || '').toLowerCase().includes(query);
+    });
+    renderAnnuaireList();
+}
+
+function renderAnnuaireList() {
+    const list = document.getElementById('annuaireList');
+    const count = document.getElementById('annuaireCount');
+    if (!list) return;
+    if (count) count.textContent = `${annuaireFiltered.length} contact${annuaireFiltered.length !== 1 ? 's' : ''}`;
+
+    if (!annuaireFiltered.length) {
+        list.innerHTML = '<div class="annuaire-empty">Aucun contact trouvé.</div>';
+        return;
+    }
+
+    list.innerHTML = annuaireFiltered.map((c, i) => {
+        const initials = (c.name || c.email || '?').slice(0, 2).toUpperCase();
+        const sourceBadges = (c.sources || []).map(s =>
+            s === 'import'
+                ? '<span class="annuaire-badge annuaire-badge-import">Importé</span>'
+                : '<span class="annuaire-badge annuaire-badge-mail">Mail</span>'
+        ).join('');
+        const mailInfo = c.mail_count ? `<span class="annuaire-mail-count">${c.mail_count} mail${c.mail_count > 1 ? 's' : ''}</span>` : '';
+        return `
+            <div class="annuaire-item" onclick="openAnnuaireContact(${i})">
+                <div class="annuaire-avatar">${esc(initials)}</div>
+                <div class="annuaire-item-info">
+                    <span class="annuaire-item-name">${esc(c.name || c.email)}</span>
+                    <span class="annuaire-item-email">${esc(c.email)}</span>
+                </div>
+                <div class="annuaire-item-meta">
+                    ${sourceBadges}
+                    ${mailInfo}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+function openAnnuaireContact(index) {
+    const c = annuaireFiltered[index];
+    if (!c) return;
+    const detail = document.getElementById('annuaireDetail');
+    if (!detail) return;
+
+    document.querySelectorAll('.annuaire-item').forEach((el, i) => {
+        el.classList.toggle('active', i === index);
+    });
+
+    const initials = (c.name || c.email || '?').slice(0, 2).toUpperCase();
+    const sourceBadges = (c.sources || []).map(s =>
+        s === 'import'
+            ? '<span class="annuaire-badge annuaire-badge-import">Importé</span>'
+            : '<span class="annuaire-badge annuaire-badge-mail">Mail</span>'
+    ).join(' ');
+
+    detail.innerHTML = `
+        <div class="annuaire-detail-card">
+            <div class="annuaire-detail-header">
+                <div class="annuaire-avatar annuaire-avatar-lg">${esc(initials)}</div>
+                <div class="annuaire-detail-identity">
+                    <h3>${esc(c.name || 'Inconnu')}</h3>
+                    <span class="annuaire-detail-email">${esc(c.email)}</span>
+                    <div class="annuaire-detail-sources">${sourceBadges}</div>
+                </div>
+            </div>
+            <div class="annuaire-detail-actions">
+                <button onclick="annuaireComposeTo('${esc(c.email)}')" class="annuaire-action-btn"><i class="icon-send"></i> Écrire</button>
+            </div>
+            ${c.mail_count ? `<div class="annuaire-detail-stat"><i class="icon-mail"></i> ${c.mail_count} mail${c.mail_count > 1 ? 's' : ''} échangé${c.mail_count > 1 ? 's' : ''}</div>` : ''}
+        </div>`;
+}
+
+function annuaireComposeTo(email) {
+    switchTab('mail');
+    setTimeout(() => {
+        addRecipient(email);
+    }, 100);
 }
