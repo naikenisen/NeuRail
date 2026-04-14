@@ -19,6 +19,7 @@ import urllib.parse
 from urllib.parse import parse_qs, urlparse
 from datetime import datetime
 from email import policy as email_policy
+from email.utils import getaddresses
 
 from app_config import (
     APP_DATA_DIR,
@@ -336,6 +337,71 @@ def loadContactsData():
     except Exception:
         pass
     return contacts
+
+
+# Construit l'annuaire unifié à partir des contacts CSV et des mails de la boîte
+def _build_annuaire():
+    directory = {}  # clé = email normalisé
+
+    # 1) Contacts CSV importés
+    for c in loadContactsData():
+        email_lower = c["email"].lower()
+        if email_lower not in directory:
+            directory[email_lower] = {
+                "name": c["name"],
+                "email": c["email"],
+                "sources": ["import"],
+                "mail_count": 0,
+            }
+        elif "import" not in directory[email_lower]["sources"]:
+            directory[email_lower]["sources"].append("import")
+            if c["name"] and not directory[email_lower]["name"]:
+                directory[email_lower]["name"] = c["name"]
+
+    # 2) Extraire les personnes depuis les mails de la boîte de réception
+    inbox = load_inbox_index()
+    for mail in inbox:
+        if mail.get("deleted"):
+            continue
+        people = []
+        # Expéditeur
+        from_name = mail.get("from_name", "")
+        from_email = mail.get("from_email", "")
+        if from_email:
+            people.append((from_name, from_email))
+        # Destinataires (champ "to" brut)
+        to_hdr = mail.get("to", "")
+        if to_hdr:
+            for name, addr in getaddresses([to_hdr]):
+                if addr:
+                    people.append((name, addr))
+        # Cc
+        cc_hdr = mail.get("cc", "")
+        if cc_hdr:
+            for name, addr in getaddresses([cc_hdr]):
+                if addr:
+                    people.append((name, addr))
+
+        for name, addr in people:
+            email_lower = addr.strip().lower()
+            if not email_lower:
+                continue
+            if email_lower not in directory:
+                directory[email_lower] = {
+                    "name": name.strip(),
+                    "email": addr.strip(),
+                    "sources": ["mail"],
+                    "mail_count": 0,
+                }
+            else:
+                if "mail" not in directory[email_lower]["sources"]:
+                    directory[email_lower]["sources"].append("mail")
+                if name.strip() and not directory[email_lower]["name"]:
+                    directory[email_lower]["name"] = name.strip()
+            directory[email_lower]["mail_count"] += 1
+
+    result = sorted(directory.values(), key=lambda c: (c.get("name") or c.get("email", "")).lower())
+    return result
 
 
 # Liste des clés d'environnement gérées localement
@@ -1032,6 +1098,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(loadAppState())
         if self.path == "/api/contacts":
             return self._json(loadContactsData())
+        if self.path == "/api/annuaire":
+            try:
+                return self._json(_build_annuaire())
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
         if self.path == "/api/app-config":
             try:
                 return self._json({"ok": True, **_get_app_install_config()})
