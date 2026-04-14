@@ -62,15 +62,16 @@ function detectPythonCommand() {
 }
 
 function ensurePythonDependencies(pythonCmd) {
-  // Check ALL required imports, not just a subset
-  const requiredImports = ['html2text', 'neo4j', 'dotenv', 'sentence_transformers', 'langchain', 'langchain_community'];
-  const check = spawnSync(pythonCmd, ['-c', `import ${requiredImports.join(', ')}`], {
+  // Only check lightweight critical deps synchronously (fast: <0.5s).
+  // Heavy ML/AI deps (sentence_transformers, langchain) are checked in background.
+  const criticalImports = ['html2text', 'dotenv'];
+  const check = spawnSync(pythonCmd, ['-c', `import ${criticalImports.join(', ')}`], {
     encoding: 'utf8',
-    timeout: 30000,
+    timeout: 10000,
   });
 
   if (check.status === 0) {
-    pushBackendLog('Python deps check: OK');
+    pushBackendLog('Python critical deps check: OK');
     return;
   }
 

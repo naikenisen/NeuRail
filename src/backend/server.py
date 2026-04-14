@@ -152,8 +152,23 @@ def _parse_frontmatter(content: str) -> dict:
     return fm
 
 
+# Cache pour _list_vault_mails : (mtime_ns_du_dossier, résultat)
+_vault_mails_cache = {"mtime": 0, "data": []}
+_VAULT_CACHE_TTL = 5  # secondes
+
+
 # Liste tous les mails markdown du vault avec leurs métadonnées de frontmatter
 def _list_vault_mails():
+    now = time.time()
+    try:
+        dir_mtime = os.stat(GRAPH_MD_DIR).st_mtime
+    except OSError:
+        dir_mtime = 0
+    # Return cached result if directory hasn't changed and cache isn't stale
+    if (_vault_mails_cache["data"]
+            and _vault_mails_cache["mtime"] == dir_mtime
+            and now - _vault_mails_cache.get("ts", 0) < _VAULT_CACHE_TTL):
+        return _vault_mails_cache["data"]
     mails = []
     if not os.path.isdir(GRAPH_MD_DIR):
         return mails
@@ -207,6 +222,9 @@ def _list_vault_mails():
             })
         except Exception:
             continue
+    _vault_mails_cache["mtime"] = dir_mtime
+    _vault_mails_cache["data"] = mails
+    _vault_mails_cache["ts"] = now
     return mails
 
 
@@ -215,6 +233,9 @@ _WIKILINK_RE = re.compile(r'\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]')
 
 # Extensions de pièces jointes dont le texte peut être extrait pour la recherche
 _SEARCHABLE_ATT_EXTS = {'.pdf', '.docx', '.xlsx', '.odt'}
+
+# Cache mémoire pour le texte extrait des pièces jointes (chemin → texte)
+_attachment_text_cache = {}
 
 
 def _extract_text_from_attachment(filepath: str) -> str:
@@ -281,7 +302,7 @@ def _extract_text_from_attachment(filepath: str) -> str:
 
 
 def _get_attachment_texts_for_mail(body: str) -> str:
-    """Extrait le texte de toutes les pièces jointes référencées dans un mail."""
+    """Extrait le texte de toutes les pièces jointes référencées dans un mail (avec cache)."""
     links = _WIKILINK_RE.findall(body)
     parts = []
     for link in links:
@@ -289,7 +310,11 @@ def _get_attachment_texts_for_mail(body: str) -> str:
         if ext not in _SEARCHABLE_ATT_EXTS:
             continue
         att_path = os.path.join(GRAPH_ATT_DIR, link)
-        text = _extract_text_from_attachment(att_path)
+        if att_path in _attachment_text_cache:
+            text = _attachment_text_cache[att_path]
+        else:
+            text = _extract_text_from_attachment(att_path)
+            _attachment_text_cache[att_path] = text
         if text:
             parts.append(text)
     return "\n".join(parts)

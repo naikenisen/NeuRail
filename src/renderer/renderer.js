@@ -1429,22 +1429,22 @@ function setReplyComposerContext(context) {
     const promptInput = document.getElementById('replyPromptInput');
 
     if (composerReplyContext) {
-        if (promptField) promptField.style.display = '';
+        if (promptField) promptField.classList.remove('is-hidden');
         if (originalField) {
-            originalField.style.display = '';
+            originalField.classList.remove('is-hidden');
             const label = originalField.querySelector('label');
             if (label) {
                 label.textContent = composerReplyContext.type === 'forward'
                     ? 'Mail transféré (figé)' : 'Message original (figé)';
             }
         }
-        if (generateBtn) generateBtn.style.display = '';
+        if (generateBtn) generateBtn.classList.remove('is-hidden');
         if (originalBody) originalBody.value = composerReplyContext.originalText || '';
         if (promptInput && !promptInput.value.trim()) promptInput.value = 'Réponse professionnelle, claire et concise.';
     } else {
-        if (promptField) promptField.style.display = 'none';
-        if (originalField) originalField.style.display = 'none';
-        if (generateBtn) generateBtn.style.display = 'none';
+        if (promptField) promptField.classList.add('is-hidden');
+        if (originalField) originalField.classList.add('is-hidden');
+        if (generateBtn) generateBtn.classList.add('is-hidden');
         if (originalBody) originalBody.value = '';
         if (promptInput) promptInput.value = '';
     }
@@ -4783,7 +4783,11 @@ async function loadArchiveMails() {
 
 function parseArchiveDate(dateStr) {
     if (!dateStr) return 0;
-    const d = new Date(dateStr);
+    // Date-only strings like "2026-04-10" are parsed as UTC by new Date().
+    // Force local-time interpretation by appending T00:00:00.
+    let s = dateStr.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s += 'T00:00:00';
+    const d = new Date(s);
     return isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
