@@ -1855,6 +1855,8 @@
             flex-direction: column;
             flex: 1;
             min-height: 0;
+            align-items: stretch;
+            justify-content: flex-start;
         }
         .mailchat-header {
             display: flex; align-items: center; gap: 1rem;
@@ -2166,9 +2168,13 @@
         #tab-mailchat.active {
             display: flex;
             flex-direction: column;
+            flex: 1;
+            min-height: 0;
         }
         #tab-mailchat .mailchat-v2 {
-            height: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+            height: auto;
             border-radius: 14px;
             border: 1px solid var(--mailchat-shell-border);
             box-shadow: 0 14px 40px rgba(2, 6, 23, 0.28);
@@ -2559,17 +2565,28 @@
             overflow: hidden;
         }
         #tab-archive.active {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            align-items: stretch;
+            justify-content: flex-start;
         }
         #tab-annuaire {
-            height: calc(100vh - 110px);
             overflow: hidden;
         }
         #tab-annuaire.active {
-            display: block;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            align-items: stretch;
+            justify-content: flex-start;
         }
         .archive-container {
-            height: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+            height: auto;
             display: flex;
             flex-direction: column;
             border-radius: 14px;
@@ -2719,7 +2736,9 @@
 
         /* ─── Annuaire Tab ───────────────────────────── */
         .annuaire-container {
-            height: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+            height: auto;
             display: flex;
             flex-direction: column;
             border-radius: 14px;
