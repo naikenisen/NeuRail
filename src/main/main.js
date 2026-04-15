@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, ipcMain, dialog, Menu, globalShortcut, shell, protocol, safeStorage } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, dialog, Menu, globalShortcut, shell, protocol, safeStorage, nativeImage } = require('electron');
 const { spawn, spawnSync, execSync } = require('child_process');
 const path = require('path');
 const net = require('net');
@@ -27,6 +27,53 @@ let browserVisible = false;
 let activeBrowserTabId = null;
 let browserBounds = { x: 0, y: 0, width: 0, height: 0 };
 const browserViews = new Map();
+const DRAG_TEMP_DIR = path.join(os.tmpdir(), 'neurail-drag');
+
+function sanitizeFilenameForTemp(name) {
+  const base = String(name || 'fichier').replace(/[\\/:*?"<>|]/g, '_').trim() || 'fichier';
+  return base.slice(0, 180);
+}
+
+function ensureDragTempDir() {
+  try {
+    fs.mkdirSync(DRAG_TEMP_DIR, { recursive: true });
+  } catch {}
+}
+
+function cleanupOldDragFiles(maxAgeMs = 24 * 60 * 60 * 1000) {
+  try {
+    ensureDragTempDir();
+    const now = Date.now();
+    for (const entry of fs.readdirSync(DRAG_TEMP_DIR, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const p = path.join(DRAG_TEMP_DIR, entry.name);
+      const st = fs.statSync(p);
+      if (now - st.mtimeMs > maxAgeMs) {
+        fs.unlinkSync(p);
+      }
+    }
+  } catch {}
+}
+
+function getDragIcon() {
+  const iconCandidates = [
+    resourcePath(app, 'assets', 'logo.png'),
+    resourcePath(app, 'build', 'icons', 'icon.png'),
+  ];
+  for (const p of iconCandidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const img = nativeImage.createFromPath(p);
+        if (!img.isEmpty()) {
+          // Resize to 32x32 — large icons cause SIGILL on X11 native drag
+          return img.resize({ width: 32, height: 32 });
+        }
+      }
+    } catch {}
+  }
+  // Minimal 1x1 fallback
+  return nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5N8lQAAAAASUVORK5CYII=');
+}
 
 /* Decrypt a vault secret using safeStorage (available after app ready) */
 function decryptVaultSecretMain(cipherB64) {
@@ -746,6 +793,111 @@ ipcMain.handle('shell:openExternal', async (_event, url) => {
     return true;
   } catch {
     return false;
+  }
+});
+
+ipcMain.handle('drag:writeTempFileFromBase64', async (_event, payload = {}) => {
+  try {
+    const rawName = sanitizeFilenameForTemp(payload.filename || 'document');
+    const base64 = String(payload.base64 || '').trim();
+    if (!base64) return { ok: false, error: 'Données vides' };
+
+    ensureDragTempDir();
+    cleanupOldDragFiles();
+
+    const dotIdx = rawName.lastIndexOf('.');
+    const stem = dotIdx > 0 ? rawName.slice(0, dotIdx) : rawName;
+    const ext = dotIdx > 0 ? rawName.slice(dotIdx) : '';
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const finalName = `${stem}-${unique}${ext}`;
+    const filePath = path.join(DRAG_TEMP_DIR, finalName);
+
+    const fileBuffer = Buffer.from(base64, 'base64');
+    fs.writeFileSync(filePath, fileBuffer);
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.on('drag:startFile', (event, payload = {}) => {
+  try {
+    const filePath = String(payload.filePath || '').trim();
+    if (!filePath || !fs.existsSync(filePath)) {
+      console.error('[drag:startFile] Fichier introuvable:', filePath);
+      return;
+    }
+    const icon = getDragIcon();
+    console.log('[drag:startFile] Starting native drag:', filePath, 'icon empty?', icon.isEmpty());
+    event.sender.startDrag({
+      file: filePath,
+      icon,
+    });
+  } catch (err) {
+    console.error('[drag:startFile] Error:', err);
+  }
+});
+
+ipcMain.handle('drag:copyFileToDestination', async (_event, payload = {}) => {
+  try {
+    const sourcePath = String(payload.sourcePath || '').trim();
+    const destinationPath = String(payload.destinationPath || '').trim();
+    if (!sourcePath || !destinationPath) return { ok: false, error: 'Chemin manquant' };
+
+    // Security: source must be inside the temp drag directory
+    const resolvedSource = path.resolve(sourcePath);
+    const resolvedTempDir = path.resolve(DRAG_TEMP_DIR);
+    if (!resolvedSource.startsWith(resolvedTempDir + path.sep)) {
+      return { ok: false, error: 'Source non autorisée' };
+    }
+    if (!fs.existsSync(resolvedSource)) {
+      return { ok: false, error: 'Fichier source introuvable' };
+    }
+
+    fs.copyFileSync(resolvedSource, destinationPath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+let dragHelperProcess = null;
+
+ipcMain.handle('drag:launchHelper', async (_event, payload = {}) => {
+  try {
+    const filePath = String(payload.filePath || '').trim();
+    const displayName = String(payload.displayName || '').trim();
+    if (!filePath || !fs.existsSync(filePath)) {
+      return { ok: false, error: 'Fichier introuvable' };
+    }
+
+    // Kill any previous helper
+    if (dragHelperProcess && !dragHelperProcess.killed) {
+      try { dragHelperProcess.kill(); } catch {}
+    }
+
+    const helperScript = resourcePath(app, 'tools', 'drag_helper.py');
+    if (!fs.existsSync(helperScript)) {
+      return { ok: false, error: 'drag_helper.py introuvable' };
+    }
+
+    const args = [helperScript, filePath];
+    if (displayName) args.push(displayName);
+
+    dragHelperProcess = spawn('python3', args, {
+      stdio: 'ignore',
+      detached: false,
+    });
+
+    dragHelperProcess.on('error', (err) => {
+      console.error('[drag:launchHelper] Spawn error:', err.message);
+    });
+    dragHelperProcess.on('exit', () => { dragHelperProcess = null; });
+
+    console.log('[drag:launchHelper] Launched GTK drag helper for:', filePath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
   }
 });
 

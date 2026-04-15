@@ -1477,10 +1477,51 @@ let mpSkipStep1 = false;
 let mpSkipAttachments = false;
 let mpDeferredServerDeleteIds = [];
 let mpPreparedAttachment = null;
+let mpPendingDeleteCurrentMail = false;
 
 function mpShowStep(stepId) {
     document.querySelectorAll('#mailProcessContent .mp-step').forEach(el => el.classList.add('is-hidden'));
     document.getElementById(stepId).classList.remove('is-hidden');
+}
+
+function mpSanitizePreviewHtml(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(String(html || ''), 'text/html');
+    doc.querySelectorAll('script, style, iframe, object, embed, link, meta, base').forEach(el => el.remove());
+
+    doc.querySelectorAll('*').forEach((el) => {
+        Array.from(el.attributes).forEach((attr) => {
+            const name = String(attr.name || '').toLowerCase();
+            const value = String(attr.value || '').trim().toLowerCase();
+            if (name.startsWith('on')) {
+                el.removeAttribute(attr.name);
+                return;
+            }
+            if ((name === 'href' || name === 'src') && (value.startsWith('javascript:') || value.startsWith('data:text/html'))) {
+                el.removeAttribute(attr.name);
+            }
+        });
+    });
+
+    return doc.body ? doc.body.innerHTML : '';
+}
+
+function mpRenderMailPreview(mail) {
+    const previewEl = document.getElementById('mpPreview');
+    if (!previewEl) return;
+
+    const bodyHtml = String(mail?.body_html || '').trim();
+    if (bodyHtml) {
+        previewEl.innerHTML = mpSanitizePreviewHtml(bodyHtml);
+        return;
+    }
+
+    const bodyText = String(mail?.body || '').trim();
+    if (!bodyText) {
+        previewEl.innerHTML = '<div class="mp-preview-text-fallback">Aucun contenu lisible.</div>';
+        return;
+    }
+    previewEl.innerHTML = `<div class="mp-preview-text-fallback">${esc(bodyText)}</div>`;
 }
 
 function startMailProcess(mailIds, skipDeleteStep, skipAttachmentStep = false) {
@@ -1489,6 +1530,7 @@ function startMailProcess(mailIds, skipDeleteStep, skipAttachmentStep = false) {
     mpSkipStep1 = !!skipDeleteStep;
     mpSkipAttachments = !!skipAttachmentStep;
     mpDeferredServerDeleteIds = [];
+    mpPendingDeleteCurrentMail = false;
     const modal = document.getElementById('mailProcessModal');
     modal.classList.add('show');
     mpProcessCurrent();
@@ -1507,14 +1549,64 @@ async function markMailProcessed(mailId) {
     } catch {}
 }
 
-function closeMailProcess() {
+function closeMailProcess(completed = false) {
+    const aborted = !completed && mpQueue.length > 0 && mpIndex < mpQueue.length;
+
+    // A cancellation must never trigger deferred deletion for the current mail.
+    if (aborted) {
+        mpPendingDeleteCurrentMail = false;
+        showToast('Traitement annule : le mail courant reste non traite et non supprime.', 'warning', 3200);
+    }
+
     document.getElementById('mailProcessModal').classList.remove('show');
     mpQueue = [];
     mpIndex = 0;
     mpSkipAttachments = false;
     mpCurrentMail = null;
     mpDeferredServerDeleteIds = [];
+    mpPendingDeleteCurrentMail = false;
     mpClearPreparedAttachment();
+}
+
+function mpGetRelevantAttachments(attachments) {
+    const atts = Array.isArray(attachments) ? attachments : [];
+    const relevant = [];
+    atts.forEach((name, idx) => {
+        const ext = '.' + String(name || '').split('.').pop().toLowerCase();
+        if (MP_RELEVANT_EXTS.includes(ext)) {
+            relevant.push({ name, idx });
+        }
+    });
+    return relevant;
+}
+
+async function mpDeleteCurrentMailLocallyAndQueueRemote() {
+    if (!mpCurrentMail || !mpCurrentMail.id) return false;
+    try {
+        const r = await fetch('/api/mail/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: mpCurrentMail.id, delete_on_server: false })
+        });
+        const result = await r.json();
+        if (!r.ok || !result.ok) {
+            showToast('Suppression locale impossible: ' + (result.error || 'Erreur inconnue'), 'warning', 3500);
+            return false;
+        }
+        mpDeferredServerDeleteIds.push(mpCurrentMail.id);
+        return true;
+    } catch {
+        showToast('Suppression locale impossible.', 'warning', 3000);
+        return false;
+    }
+}
+
+async function mpFinalizeCurrentMailAfterAttachmentStep() {
+    if (mpPendingDeleteCurrentMail) {
+        await mpDeleteCurrentMailLocallyAndQueueRemote();
+        mpPendingDeleteCurrentMail = false;
+    }
+    mpNextMail();
 }
 
 function mpSanitizeForFilename(value, maxLen = 50) {
@@ -1620,10 +1712,27 @@ function mpRenderPreparedAttachment() {
             showToast('Ajoute une description courte sur une ligne avant le glisser-deposer.', 'warning', 3200);
             return;
         }
-        const mime = mpPreparedAttachment.contentType || 'application/octet-stream';
-        e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('DownloadURL', `${mime}:${mpPreparedAttachment.filename}:${mpPreparedAttachment.url}`);
-        e.dataTransfer.setData('text/uri-list', mpPreparedAttachment.url);
+
+        // Native Electron startDrag: sends the file via XDnD (same protocol as Nautilus).
+        // e.preventDefault() cancels the web drag so startDrag() takes over entirely.
+        if (window.electronAPI?.startDragOut && mpPreparedAttachment.filePath) {
+            e.preventDefault();
+            window.electronAPI.startDragOut(mpPreparedAttachment.filePath);
+            return;
+        }
+    });
+}
+
+function mpBlobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = String(reader.result || '');
+            const commaIdx = dataUrl.indexOf(',');
+            resolve(commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '');
+        };
+        reader.onerror = () => reject(reader.error || new Error('Erreur lecture fichier'));
+        reader.readAsDataURL(blob);
     });
 }
 
@@ -1674,12 +1783,13 @@ async function mpProcessCurrent() {
         const r = await fetch('/api/mail/' + encodeURIComponent(mailId));
         if (!r.ok) { mpNextMail(); return; }
         mpCurrentMail = await r.json();
+        mpPendingDeleteCurrentMail = false;
     } catch { mpNextMail(); return; }
 
     document.getElementById('mpFrom').textContent = (mpCurrentMail.from_name || '') + ' <' + (mpCurrentMail.from_email || '') + '>';
     document.getElementById('mpSubject').textContent = mpCurrentMail.subject || 'Sans sujet';
     document.getElementById('mpDate').textContent = mpCurrentMail.date || '';
-    document.getElementById('mpPreview').textContent = (mpCurrentMail.body || '').substring(0, 300);
+    mpRenderMailPreview(mpCurrentMail);
 
     if (mpSkipStep1) {
         mpShowStep('mpStep2');
@@ -1698,18 +1808,24 @@ async function mpNextMail() {
 
 async function mpDeleteFromServer() {
     if (!mpCurrentMail) return;
-    try {
-        await fetch('/api/mail/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: mpCurrentMail.id, delete_on_server: false })
-        });
-        mpDeferredServerDeleteIds.push(mpCurrentMail.id);
-    } catch {}
+    mpPendingDeleteCurrentMail = true;
+
+    const relevant = mpGetRelevantAttachments(mpCurrentMail.attachments || []);
+    if (relevant.length > 0 && !mpSkipAttachments) {
+        mpRelevantAtts = relevant;
+        mpAttIndex = 0;
+        showToast('Pièce jointe à protéger détectée: traite-la avant suppression.', 'warning', 3200);
+        mpShowAttachment();
+        return;
+    }
+
+    await mpDeleteCurrentMailLocallyAndQueueRemote();
+    mpPendingDeleteCurrentMail = false;
     mpNextMail();
 }
 
 function mpKeepMail() {
+    mpPendingDeleteCurrentMail = false;
     mpShowStep('mpStep2');
 }
 
@@ -1764,28 +1880,21 @@ function mpAfterSummary() {
 
 function mpCheckAttachments() {
     if (mpSkipAttachments) {
-        mpNextMail();
+        mpFinalizeCurrentMailAfterAttachmentStep();
         return;
     }
-    const atts = mpCurrentMail.attachments || [];
-    mpRelevantAtts = [];
-    atts.forEach((name, idx) => {
-        const ext = '.' + name.split('.').pop().toLowerCase();
-        if (MP_RELEVANT_EXTS.includes(ext)) {
-            mpRelevantAtts.push({ name, idx });
-        }
-    });
+    mpRelevantAtts = mpGetRelevantAttachments(mpCurrentMail.attachments || []);
     mpAttIndex = 0;
     if (mpRelevantAtts.length > 0) {
         mpShowAttachment();
     } else {
-        mpNextMail();
+        mpFinalizeCurrentMailAfterAttachmentStep();
     }
 }
 
 function mpShowAttachment() {
     if (mpAttIndex >= mpRelevantAtts.length) {
-        mpNextMail();
+        mpFinalizeCurrentMailAfterAttachmentStep();
         return;
     }
     mpClearPreparedAttachment();
@@ -1898,8 +2007,7 @@ function mpAddN2DuringProcess() {
 
 function mpCancelClassification() {
     mpClearPreparedAttachment();
-    mpAttIndex++;
-    mpShowAttachment();
+    closeMailProcess(false);
 }
 
 async function mpPrepareAttachmentForDrop() {
@@ -1933,15 +2041,40 @@ async function mpPrepareAttachmentForDrop() {
             return;
         }
         const blob = await resp.blob();
+        let tempFilePath = '';
+
+        if (window.electronAPI?.writeTempFileFromBase64) {
+            const b64 = await mpBlobToBase64(blob);
+            const writeResult = await window.electronAPI.writeTempFileFromBase64({
+                filename,
+                base64: b64,
+            });
+            if (writeResult?.ok && writeResult.filePath) {
+                tempFilePath = String(writeResult.filePath);
+            }
+        }
+
         mpClearPreparedAttachment();
         mpPreparedAttachment = {
             filename,
             contentType: blob.type || 'application/octet-stream',
             url: URL.createObjectURL(blob),
+            blob,
+            filePath: tempFilePath,
             description,
         };
         mpRenderPreparedAttachment();
-        showToast('Fichier prêt: glisse-dépose le chip dans ton logiciel documentaire.', 'success', 3500);
+
+        // Launch native GTK drag helper for apps requiring XDG portal atoms (Storga, etc.)
+        if (tempFilePath && window.electronAPI?.launchDragHelper) {
+            window.electronAPI.launchDragHelper({
+                filePath: tempFilePath,
+                displayName: filename,
+            });
+            showToast('Fenêtre de glisser-déposer ouverte — glisse le fichier dans Storga.', 'success', 4000);
+        } else {
+            showToast('Fichier prêt: glisse-dépose le chip dans ton logiciel documentaire.', 'success', 3500);
+        }
     } catch (e) {
         showToast('Erreur : ' + e.message, 'error', 3000);
     }
@@ -1956,6 +2089,32 @@ async function mpSaveAttachment() {
     mpClearPreparedAttachment();
     mpAttIndex++;
     mpShowAttachment();
+}
+
+async function mpClickDepositAttachment() {
+    if (!mpPreparedAttachment || !mpPreparedAttachment.filePath) {
+        showToast('Prépare d\'abord le fichier.', 'warning', 2800);
+        return;
+    }
+
+    try {
+        const result = await window.electronAPI.saveFileDialog({
+            defaultPath: mpPreparedAttachment.filename || 'document',
+        });
+        if (result.canceled || !result.filePath) return;
+
+        const copyResult = await window.electronAPI.copyTempFileTo({
+            sourcePath: mpPreparedAttachment.filePath,
+            destinationPath: result.filePath,
+        });
+        if (copyResult?.ok) {
+            showToast('Fichier enregistré avec succès.', 'success', 2800);
+        } else {
+            showToast('Erreur : ' + (copyResult?.error || 'Erreur inconnue'), 'error', 3500);
+        }
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 3500);
+    }
 }
 
 /* ═══════════════════════════════════════════════════════

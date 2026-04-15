@@ -55,6 +55,10 @@
       {
         "from": "data/contacts_complets_v2.csv",
         "to": "data/contacts_complets_v2.csv"
+      },
+      {
+        "from": "tools/drag_helper.py",
+        "to": "tools/drag_helper.py"
       }
     ],
     "linux": {

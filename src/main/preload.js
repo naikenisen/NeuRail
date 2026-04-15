@@ -26,6 +26,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   messageDialog: (options) => ipcRenderer.invoke('dialog:message', options),
   // Ouvre une URL dans le navigateur système par défaut
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  // Ecrit un fichier temporaire a partir de donnees base64 pour un glisser-deposer natif
+  writeTempFileFromBase64: (payload) => ipcRenderer.invoke('drag:writeTempFileFromBase64', payload),
+  // Demarre un glisser-deposer natif vers le systeme de fichiers
+  startDragOut: (filePath) => ipcRenderer.send('drag:startFile', { filePath }),
+  // Copie un fichier temporaire vers une destination choisie par l'utilisateur
+  copyTempFileTo: (payload) => ipcRenderer.invoke('drag:copyFileToDestination', payload),
+  // Lance la fenêtre GTK de glisser-déposer natif (support XDG portal)
+  launchDragHelper: (payload) => ipcRenderer.invoke('drag:launchHelper', payload),
 
   // Lit un fichier relatif au répertoire de l'application
   readFile: (relativePath) => ipcRenderer.invoke('fs:readFile', relativePath),

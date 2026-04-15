@@ -567,7 +567,7 @@
 
 <!-- Mail Processing Wizard Modal -->
 <div class="modal-overlay" id="mailProcessModal">
-    <div class="modal modal-w-600" id="mailProcessContent">
+    <div class="modal modal-w-900" id="mailProcessContent">
         <!-- Step 0: Progress header -->
         <div class="mp-progress">
             <span id="mpCounter">Mail 1/1</span>
@@ -687,6 +687,7 @@
             <div class="modal-actions mp-actions-center">
                 <button onclick="mpCancelClassification()">Annuler</button>
                 <button onclick="mpPrepareAttachmentForDrop()"><i class="icon-paperclip"></i> Préparer pour glisser-déposer</button>
+                <button onclick="mpClickDepositAttachment()"><i class="icon-download"></i> Enregistrer sous...</button>
                 <button class="btn-primary" onclick="mpSaveAttachment()"><i class="icon-arrow-right"></i> Suivant</button>
             </div>
         </div>
@@ -696,7 +697,7 @@
             <h2><i class="icon-check"></i> Traitement terminé</h2>
             <p>Tous les mails ont été traités.</p>
             <div class="modal-actions mp-actions-center">
-                <button class="btn-primary" onclick="closeMailProcess()">Fermer</button>
+                <button class="btn-primary" onclick="closeMailProcess(true)">Fermer</button>
             </div>
         </div>
     </div>
