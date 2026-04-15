@@ -26,8 +26,6 @@ from app_config import (
     CONTACTS_CSV,
     DATA,
     DIR,
-    GRAPH_ATT_DIR,
-    GRAPH_MD_DIR,
     ISENAPP_DATA,
     GOOGLE_MAIL_SCOPE,
     LOG_FILE,
@@ -36,6 +34,9 @@ from app_config import (
     PROJECT_ROOT,
     RENDERER_INDEX,
 )
+
+ATTACHMENTS_DIR = os.path.join(str(os.path.expanduser('~')), 'attachements')
+os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
 from account_store import (
     find_account_by_email,
     find_account_index_by_email,
@@ -70,38 +71,8 @@ from google_calendar_service import (
     get_valid_gmail_access_token,
 )
 from calendar_routes import handle_oauth_callback
-from ai_service import ai_generate_reminder, ai_generate_reply, ai_reformulate
-from graph_service import export_email_to_graph
+from ai_service import ai_generate_reminder, ai_generate_reply, ai_reformulate, ai_summarize_mail
 from autoconfig_service import autoconfig_email
-
-# Résout un nom de fichier source .md vers le .eml correspondant via le frontmatter
-def _resolve_eml_from_md_source(source_name: str) -> str:
-    src = (source_name or "").strip()
-    if not src.lower().endswith(".md"):
-        return ""
-    safe_name = os.path.basename(src)
-    if safe_name != src:
-        return ""
-
-    md_path = os.path.join(GRAPH_MD_DIR, safe_name)
-    if not os.path.isfile(md_path):
-        return ""
-
-    try:
-        with open(md_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read(4096)
-    except Exception:
-        return ""
-
-    for line in content.splitlines():
-        line = line.strip()
-        if line.startswith("eml_file:"):
-            candidate = line.split(":", 1)[1].strip()
-            candidate = os.path.basename(candidate)
-            if candidate.lower().endswith(".eml"):
-                return candidate
-    return ""
-
 
 # Stockage en mémoire des états OAuth Google en attente
 GOOGLE_OAUTH_PENDING = {}
@@ -287,8 +258,6 @@ def _get_app_install_config() -> dict:
             "contacts_csv": CONTACTS_CSV,
             "mails_dir": MAILS_DIR,
             "vault_dir": ISENAPP_DATA,
-            "vault_mails_dir": GRAPH_MD_DIR,
-            "vault_attachments_dir": GRAPH_ATT_DIR,
             "log_file": LOG_FILE,
         },
         "env": {
@@ -604,13 +573,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     mail = next((m for m in inbox if m.get("eml_file") == eml_file), None)
                 if not mail:
                     safe_eml = os.path.basename(eml_file or "")
-                    if safe_eml.lower().endswith(".md"):
-                        resolved = _resolve_eml_from_md_source(safe_eml)
-                        if resolved:
-                            safe_eml = resolved
-                    if safe_eml and safe_eml == (eml_file or ""):
-                        eml_path = os.path.join(MAILS_DIR, safe_eml)
-                    elif safe_eml and safe_eml.lower().endswith(".eml"):
+                    if safe_eml and safe_eml.lower().endswith(".eml"):
                         eml_path = os.path.join(MAILS_DIR, safe_eml)
                     else:
                         self.send_error(404)
@@ -619,20 +582,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     eml_path = os.path.join(MAILS_DIR, mail.get("eml_file", ""))
 
                 if not os.path.isfile(eml_path):
-                    safe_name = os.path.basename(filename or "")
-                    if safe_name and safe_name == (filename or ""):
-                        graph_att_path = os.path.join(GRAPH_ATT_DIR, safe_name)
-                        if os.path.isfile(graph_att_path):
-                            with open(graph_att_path, "rb") as f:
-                                payload = f.read()
-                            content_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
-                            self.send_response(200)
-                            self.send_header("Content-Type", content_type)
-                            self.send_header("Content-Disposition", f'inline; filename="{safe_name}"')
-                            self.send_header("Content-Length", str(len(payload)))
-                            self.end_headers()
-                            self.wfile.write(payload)
-                            return
                     self.send_error(404)
                     return
 
@@ -706,16 +655,84 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json({"error": str(e)}, 500)
 
         if self.path == "/api/run-mail-to-md":
-            script_path = os.path.join(DIR, "mail_to_md.py")
+            return self._json({"error": "Route supprimée"}, 410)
+
+        if self.path == "/api/mail/summarize":
             try:
-                result = subprocess.run(
-                    ["python3", script_path],
-                    capture_output=True, text=True, timeout=300
-                )
-                output = result.stdout + result.stderr
-                return self._json({"ok": result.returncode == 0, "output": output})
+                text = ai_summarize_mail(data)
+                return self._json({"ok": True, "text": text})
             except Exception as e:
-                return self._json({"ok": False, "error": str(e)}, 500)
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/mail/save-classified-attachment":
+            try:
+                mail_id = data.get("id", "")
+                att_idx = data.get("att_idx")
+                att_name = data.get("att_name", "")
+                doc_type = data.get("type", "document")
+                n1 = data.get("n1", "")
+                n2 = data.get("n2", "")
+                sender = data.get("sender", "inconnu")
+                mail_date = data.get("date", "")
+
+                if att_idx is None:
+                    return self._json({"error": "att_idx requis"}, 400)
+
+                inbox = load_inbox_index()
+                mail = next((m for m in inbox if m.get("id") == mail_id), None)
+                if not mail:
+                    return self._json({"error": "Mail introuvable"}, 404)
+
+                eml_path = os.path.join(MAILS_DIR, mail.get("eml_file", ""))
+                if not os.path.isfile(eml_path):
+                    return self._json({"error": "Fichier .eml introuvable"}, 404)
+
+                with open(eml_path, "rb") as f:
+                    msg = email_lib.message_from_bytes(f.read(), policy=email_policy.default)
+
+                payload_data, resolved_name, _ct = get_attachment_payload(msg, index=int(att_idx), filename=att_name)
+                if payload_data is None:
+                    return self._json({"error": "Pièce jointe introuvable"}, 404)
+
+                ext = os.path.splitext(resolved_name)[1].lower() if resolved_name else ""
+                safe_sender = re.sub(r'[\\/*?:"<>|@\s]+', '_', sender.strip())[:50]
+                safe_type = re.sub(r'[\\/*?:"<>|]+', '_', doc_type.strip())
+                safe_n1 = re.sub(r'[\\/*?:"<>|]+', '_', n1.strip()) if n1 else ""
+                safe_n2 = re.sub(r'[\\/*?:"<>|]+', '_', n2.strip()) if n2 else ""
+
+                if not mail_date:
+                    mail_date = datetime.now().strftime("%Y-%m-%d")
+                else:
+                    try:
+                        from email.utils import parsedate_to_datetime as _pdt
+                        dt = _pdt(mail_date)
+                        mail_date = dt.strftime("%Y-%m-%d")
+                    except Exception:
+                        try:
+                            mail_date = mail_date[:10]
+                        except Exception:
+                            mail_date = datetime.now().strftime("%Y-%m-%d")
+
+                parts = [mail_date, safe_type, safe_sender]
+                if safe_n1:
+                    parts.append(safe_n1)
+                if safe_n2:
+                    parts.append(safe_n2)
+                new_name = "-".join(parts) + ext
+
+                dest_path = os.path.join(ATTACHMENTS_DIR, new_name)
+                counter = 1
+                while os.path.exists(dest_path):
+                    new_name = "-".join(parts) + f"_{counter}" + ext
+                    dest_path = os.path.join(ATTACHMENTS_DIR, new_name)
+                    counter += 1
+
+                with open(dest_path, "wb") as f:
+                    f.write(payload_data)
+
+                return self._json({"ok": True, "path": dest_path, "filename": new_name})
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
 
         if self.path == "/api/reformulate":
             try:
@@ -965,36 +982,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     save_seen_uids(seen)
                 save_inbox_index(inbox)
                 return self._json({"ok": True, "deleted": deleted, "errors": errors})
-            except Exception as e:
-                return self._json({"error": str(e)}, 500)
-
-        if self.path == "/api/mail/export-graph":
-            try:
-                mail_id = data.get("id", "")
-                inbox = load_inbox_index()
-                mail = next((m for m in inbox if m.get("id") == mail_id), None)
-                if not mail:
-                    return self._json({"error": "Mail introuvable"}, 404)
-                md_path = export_email_to_graph(mail)
-
-                return self._json({"ok": True, "path": md_path})
-            except Exception as e:
-                return self._json({"error": str(e)}, 500)
-
-        if self.path == "/api/mail/export-graph-all":
-            try:
-                inbox = load_inbox_index()
-                visible = [m for m in inbox if not m.get("deleted")]
-                exported = 0
-                errors = []
-
-                for mail in visible:
-                    try:
-                        export_email_to_graph(mail)
-                        exported += 1
-                    except Exception as e:
-                        errors.append(f"{mail.get('subject', '?')}: {e}")
-                return self._json({"ok": True, "exported": exported, "errors": errors})
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 

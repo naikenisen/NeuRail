@@ -1346,27 +1346,248 @@ function getActiveSignatureHtml() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   Run mail_to_md.py
+   Mail Processing Wizard
    ═══════════════════════════════════════════════════════ */
-async function runV3() {
-    const outEl = document.getElementById('v3output');
-    outEl.style.display = 'block';
-    outEl.textContent = '⏳ Exécution de mail_to_md.py en cours…\n';
+const MP_RELEVANT_EXTS = ['.odt', '.docx', '.pdf', '.xlsx', '.csv'];
+const MP_N2_MAP = {
+    'Histologie': ['ia2hl','these_valentin','biolymph','mdh2','iabm','intensify','modèle de diffusion','sfh'],
+    'multimodal': ['AAP ICE','FRFT-Doc','AAP MIC','AAP FRFT-Doc','CART-IA','AAP ARC','presentation thèse','PIF','financement DSPS','4 plan pour le stage en PUI'],
+    'imagerie': ['radiomic-opc','TMTVpred'],
+    'nexomedis': ['axone','article_adlis','these_alexandre','nexostock','ASH 2026'],
+    'revue ia santé': ['Banque !','Préfecture !','INPI !','CrossRef !','Reconnaissance presse !','La poste Pro !','BNF !','OJS !','Comité scientifique !','Partenaires !','Graphique design !','Comptabilité !','eseo !','maison associations !','premiere soumission !','publicité'],
+    'EV': ['Congrès REVE 2024 TNE','Poster ISEV 2024 TNE','article_cart','exosarc','alcina','tne','exodiag','lymphome','exomel','pseudoprogression','evolve','krasipanc','thèse pharmacie','etude_observationnelle','memoire_des'],
+};
+
+let mpQueue = [];
+let mpIndex = 0;
+let mpCurrentMail = null;
+let mpRelevantAtts = [];
+let mpAttIndex = 0;
+let mpSkipStep1 = false;
+
+function mpShowStep(stepId) {
+    document.querySelectorAll('#mailProcessContent .mp-step').forEach(el => el.classList.add('is-hidden'));
+    document.getElementById(stepId).classList.remove('is-hidden');
+}
+
+function startMailProcess(mailIds, skipDeleteStep) {
+    mpQueue = mailIds;
+    mpIndex = 0;
+    mpSkipStep1 = !!skipDeleteStep;
+    const modal = document.getElementById('mailProcessModal');
+    modal.classList.add('show');
+    mpProcessCurrent();
+}
+
+function closeMailProcess() {
+    document.getElementById('mailProcessModal').classList.remove('show');
+    mpQueue = [];
+    mpIndex = 0;
+    mpCurrentMail = null;
+}
+
+async function mpProcessCurrent() {
+    if (mpIndex >= mpQueue.length) {
+        mpShowStep('mpStepDone');
+        return;
+    }
+    const mailId = mpQueue[mpIndex];
+    document.getElementById('mpCounter').textContent = `Mail ${mpIndex + 1}/${mpQueue.length}`;
+
     try {
-        const r = await fetch('/api/run-mail-to-md', { method: 'POST' });
+        const r = await fetch('/api/mail/' + encodeURIComponent(mailId));
+        if (!r.ok) { mpNextMail(); return; }
+        mpCurrentMail = await r.json();
+    } catch { mpNextMail(); return; }
+
+    document.getElementById('mpFrom').textContent = (mpCurrentMail.from_name || '') + ' <' + (mpCurrentMail.from_email || '') + '>';
+    document.getElementById('mpSubject').textContent = mpCurrentMail.subject || 'Sans sujet';
+    document.getElementById('mpDate').textContent = mpCurrentMail.date || '';
+    document.getElementById('mpPreview').textContent = (mpCurrentMail.body || '').substring(0, 300);
+
+    if (mpSkipStep1) {
+        mpShowStep('mpStep2');
+    } else {
+        mpShowStep('mpStep1');
+    }
+}
+
+function mpNextMail() {
+    mpIndex++;
+    mpProcessCurrent();
+}
+
+async function mpDeleteFromServer() {
+    if (!mpCurrentMail) return;
+    try {
+        await fetch('/api/mail/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: mpCurrentMail.id, delete_on_server: true })
+        });
+        await loadInbox();
+    } catch {}
+    mpNextMail();
+}
+
+function mpKeepMail() {
+    mpShowStep('mpStep2');
+}
+
+async function mpTextImportant() {
+    mpShowStep('mpStep2b');
+    const loadingEl = document.getElementById('mpSummaryLoading');
+    const textEl = document.getElementById('mpSummaryText');
+    loadingEl.style.display = 'block';
+    textEl.value = '';
+    textEl.style.display = 'none';
+
+    try {
+        const r = await fetch('/api/mail/summarize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: state.settings.geminiKey,
+                subject: mpCurrentMail.subject || '',
+                body: mpCurrentMail.body || ''
+            })
+        });
         const result = await r.json();
         if (result.ok) {
-            outEl.textContent = result.output || 'Terminé (aucune sortie)';
-            await loadInbox();
-            showToast('mail_to_md.py exécuté avec succès !', 'success');
+            textEl.value = result.text;
         } else {
-            outEl.textContent = 'Erreur :\n' + (result.error || result.output || 'Erreur inconnue');
-            showToast('Erreur mail_to_md.py', 'error', 3000);
+            textEl.value = 'Erreur : ' + (result.error || 'Erreur inconnue');
         }
     } catch (e) {
-        outEl.textContent = 'Erreur réseau : ' + e.message;
-        showToast('Erreur : ' + e.message, 'error', 5000);
+        textEl.value = 'Erreur : ' + e.message;
     }
+    loadingEl.style.display = 'none';
+    textEl.style.display = 'block';
+}
+
+function mpTextNotImportant() {
+    mpCheckAttachments();
+}
+
+async function mpCopySummary() {
+    const text = document.getElementById('mpSummaryText').value;
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('Résumé copié !', 'success', 2000);
+    } catch {
+        showToast('Erreur de copie', 'error', 2000);
+    }
+}
+
+function mpAfterSummary() {
+    mpCheckAttachments();
+}
+
+function mpCheckAttachments() {
+    const atts = mpCurrentMail.attachments || [];
+    mpRelevantAtts = [];
+    atts.forEach((name, idx) => {
+        const ext = '.' + name.split('.').pop().toLowerCase();
+        if (MP_RELEVANT_EXTS.includes(ext)) {
+            mpRelevantAtts.push({ name, idx });
+        }
+    });
+    mpAttIndex = 0;
+    if (mpRelevantAtts.length > 0) {
+        mpShowAttachment();
+    } else {
+        mpNextMail();
+    }
+}
+
+function mpShowAttachment() {
+    if (mpAttIndex >= mpRelevantAtts.length) {
+        mpNextMail();
+        return;
+    }
+    const att = mpRelevantAtts[mpAttIndex];
+    document.getElementById('mpAttName').textContent = att.name;
+    mpShowStep('mpStep3');
+}
+
+function mpOpenAttachment() {
+    if (!mpCurrentMail) return;
+    const att = mpRelevantAtts[mpAttIndex];
+    const url = `/api/mail/attachment?id=${encodeURIComponent(mpCurrentMail.id)}&idx=${att.idx}&name=${encodeURIComponent(att.name)}`;
+    window.open(url, '_blank', 'noopener');
+}
+
+function mpDiscardAttachment() {
+    mpAttIndex++;
+    mpShowAttachment();
+}
+
+function mpKeepAttachment() {
+    mpShowStep('mpStep3b');
+    document.getElementById('mpDocType').value = '';
+    document.getElementById('mpN1').value = '';
+    mpUpdateN2();
+}
+
+function mpUpdateN2() {
+    const n1 = document.getElementById('mpN1').value;
+    const sel = document.getElementById('mpN2');
+    sel.innerHTML = '';
+    if (!n1 || !MP_N2_MAP[n1]) {
+        sel.innerHTML = '<option value="">-- Choisir N1 d\'abord --</option>';
+        return;
+    }
+    sel.innerHTML = '<option value="">-- Choisir --</option>';
+    MP_N2_MAP[n1].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        sel.appendChild(opt);
+    });
+}
+
+function mpCancelClassification() {
+    mpAttIndex++;
+    mpShowAttachment();
+}
+
+async function mpSaveAttachment() {
+    const docType = document.getElementById('mpDocType').value;
+    const n1 = document.getElementById('mpN1').value;
+    const n2 = document.getElementById('mpN2').value;
+
+    if (!docType) { showToast('Choisis un type de fichier.', 'error'); return; }
+
+    const att = mpRelevantAtts[mpAttIndex];
+    try {
+        const r = await fetch('/api/mail/save-classified-attachment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: mpCurrentMail.id,
+                att_idx: att.idx,
+                att_name: att.name,
+                type: docType,
+                n1: n1,
+                n2: n2,
+                sender: mpCurrentMail.from_email || mpCurrentMail.from_name || 'inconnu',
+                date: mpCurrentMail.date || ''
+            })
+        });
+        const result = await r.json();
+        if (result.ok) {
+            showToast(`Sauvegardé : ${result.filename}`, 'success', 3000);
+        } else {
+            showToast('Erreur : ' + (result.error || 'Erreur'), 'error', 3000);
+            return;
+        }
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 3000);
+        return;
+    }
+
+    mpAttIndex++;
+    mpShowAttachment();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2170,7 +2391,6 @@ function renderInboxReader(mail) {
                 <button onclick="replyToMail('${esc(mail.id)}')"><i class="icon-reply"></i> Répondre</button>
                 <button onclick="replyToMail('${esc(mail.id)}', true)"><i class="icon-reply"></i> Répondre à tous</button>
                 <button onclick="forwardMail('${esc(mail.id)}')"><i class="icon-forward"></i> Transférer</button>
-                <button onclick="exportMailGraph('${esc(mail.id)}')"><i class="icon-book-open"></i> Exporter</button>
                 <button onclick="toggleInboxRead('${esc(mail.id)}')">${mail.read ? '<i class="icon-mail-open"></i> Marquer non lu' : '<i class="icon-mail"></i> Marquer lu'}</button>
                 <button class="danger" onclick="openDeleteMailModal('${esc(mail.id)}')"><i class="icon-trash-2"></i> Supprimer</button>
             </div>
@@ -2198,6 +2418,8 @@ async function fetchEmails() {
     statusEl.className = 'inbox-status loading';
     statusEl.textContent = 'Connexion aux serveurs (POP3/IMAP/Gmail OAuth)…';
 
+    const previousIds = new Set(inboxMails.map(m => m.id));
+
     try {
         const r = await fetch('/api/fetch-emails', { method: 'POST' });
         const result = await r.json();
@@ -2211,6 +2433,13 @@ async function fetchEmails() {
                 : '';
             statusEl.className = 'inbox-status success';
             statusEl.textContent = `${result.new_count} nouveau(x) mail(s) récupéré(s)${errStr}`;
+
+            const newMailIds = inboxMails
+                .filter(m => !previousIds.has(m.id) && !m.deleted)
+                .map(m => m.id);
+            if (newMailIds.length > 0) {
+                setTimeout(() => startMailProcess(newMailIds, false), 500);
+            }
         }
     } catch (e) {
         statusEl.className = 'inbox-status error';
@@ -2318,47 +2547,6 @@ function forwardMail(mailId) {
         type: 'forward'
     });
     document.getElementById('mailToInput').focus();
-}
-
-async function exportMailGraph(mailId) {
-    showLoading('Export vers Graph…');
-    try {
-        const r = await fetch('/api/mail/export-graph', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: mailId })
-        });
-        const result = await r.json();
-        if (result.ok) {
-            showToast('Exporté vers Graph !', 'success', 3000);
-        } else {
-            showToast('Erreur : ' + (result.error || 'Erreur'), 'error', 5000);
-        }
-    } catch (e) {
-        showToast('Erreur : ' + e.message, 'error', 5000);
-    } finally {
-        hideLoading();
-    }
-}
-
-async function exportAllGraph() {
-    showLoading('Export de tous les mails vers Graph…');
-    try {
-        const r = await fetch('/api/mail/export-graph-all', { method: 'POST' });
-        const result = await r.json();
-        if (result.ok) {
-            const errStr = result.errors && result.errors.length
-                ? ` (${result.errors.length} erreur(s))`
-                : '';
-            showToast(`${result.exported} mail(s) exporté(s)${errStr}`, 'success', 3000);
-        } else {
-            showToast('Erreur : ' + (result.error || 'Erreur'), 'error', 5000);
-        }
-    } catch (e) {
-        showToast('Erreur : ' + e.message, 'error', 5000);
-    } finally {
-        hideLoading();
-    }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2871,6 +3059,8 @@ async function sendMailSMTP() {
         ? buildHtmlBodyWithOptionalQuote(document.getElementById('mailBody').value.trim(), signatureHtml, getQuoteTextForHtml())
         : null;
 
+    const previousIds = new Set(inboxMails.map(m => m.id));
+
     showLoading('Envoi du mail via SMTP…');
     try {
         const r = await fetch('/api/send-email', {
@@ -2890,6 +3080,15 @@ async function sendMailSMTP() {
                 render();
             }
             setReplyComposerContext(null);
+
+            // Launch mail processing wizard for the sent mail (skip delete step)
+            await loadInbox();
+            const sentMailIds = inboxMails
+                .filter(m => !previousIds.has(m.id) && m.folder === 'sent')
+                .map(m => m.id);
+            if (sentMailIds.length > 0) {
+                setTimeout(() => startMailProcess(sentMailIds, true), 500);
+            }
         } else {
             showToast('Erreur : ' + (result.error || 'Erreur'), 'error', 5000);
         }

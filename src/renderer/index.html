@@ -57,12 +57,10 @@
                 <button onclick="fetchEmails()"><i class="icon-refresh-cw"></i> Relever les mails</button>
                 <button onclick="openAccountsModal()"><i class="icon-user"></i> Comptes</button>
                 <button onclick="toggleInboxFolder()" id="inboxFolderBtn"><i class="icon-inbox"></i> Reçus</button>
-                <button onclick="runV3()"><i class="icon-archive"></i> Archiver les mails</button>
             </div>
         </header>
 
         <div id="inbox-status" class="inbox-status is-hidden"></div>
-        <div class="terminal-output is-hidden" id="v3output"></div>
 
         <div class="inbox-layout">
             <div class="inbox-list-panel" id="inboxListPanel">
@@ -549,6 +547,131 @@
         <div class="modal-actions">
             <button onclick="closeAccountsModal()">Annuler</button>
             <button class="btn-primary" onclick="saveAccountsFromModal()"><i class="icon-save"></i> Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Mail Processing Wizard Modal -->
+<div class="modal-overlay" id="mailProcessModal">
+    <div class="modal modal-w-600" id="mailProcessContent">
+        <!-- Step 0: Progress header -->
+        <div class="mp-progress">
+            <span id="mpCounter">Mail 1/1</span>
+            <button class="mp-close-btn" onclick="closeMailProcess()">&times;</button>
+        </div>
+
+        <!-- Step 1: Keep or Delete -->
+        <div class="mp-step" id="mpStep1">
+            <h2><i class="icon-mail"></i> Traitement du mail</h2>
+            <div class="mp-mail-info">
+                <div><strong>De :</strong> <span id="mpFrom"></span></div>
+                <div><strong>Sujet :</strong> <span id="mpSubject"></span></div>
+                <div><strong>Date :</strong> <span id="mpDate"></span></div>
+                <div class="mp-preview" id="mpPreview"></div>
+            </div>
+            <div class="modal-actions mp-actions-center">
+                <button class="btn-danger" onclick="mpDeleteFromServer()"><i class="icon-trash-2"></i> Supprimer du serveur</button>
+                <button class="btn-primary" onclick="mpKeepMail()"><i class="icon-check"></i> Conserver</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Text important? -->
+        <div class="mp-step is-hidden" id="mpStep2">
+            <h2><i class="icon-file-text"></i> Contenu important ?</h2>
+            <p>Le contenu texte de ce mail est-il important et doit être conservé ?</p>
+            <div class="modal-actions mp-actions-center">
+                <button onclick="mpTextNotImportant()">Non</button>
+                <button class="btn-primary" onclick="mpTextImportant()"><i class="icon-sparkles"></i> Oui, résumer avec IA</button>
+            </div>
+        </div>
+
+        <!-- Step 2b: AI Summary -->
+        <div class="mp-step is-hidden" id="mpStep2b">
+            <h2><i class="icon-sparkles"></i> Résumé IA</h2>
+            <div id="mpSummaryLoading" class="mp-loading">Génération du résumé en cours…</div>
+            <textarea id="mpSummaryText" class="mp-summary-textarea" readonly></textarea>
+            <div class="modal-actions mp-actions-center">
+                <button class="btn-primary" onclick="mpCopySummary()"><i class="icon-copy"></i> Copier dans le presse-papier</button>
+                <button onclick="mpAfterSummary()">Suivant</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Attachment processing -->
+        <div class="mp-step is-hidden" id="mpStep3">
+            <h2><i class="icon-paperclip"></i> Pièce jointe</h2>
+            <div class="mp-att-info">
+                <div><strong>Fichier :</strong> <span id="mpAttName"></span></div>
+            </div>
+            <div class="modal-actions mp-actions-center">
+                <button onclick="mpOpenAttachment()"><i class="icon-eye"></i> Ouvrir</button>
+                <button class="btn-danger" onclick="mpDiscardAttachment()"><i class="icon-trash-2"></i> Jeter</button>
+                <button class="btn-primary" onclick="mpKeepAttachment()"><i class="icon-check"></i> Conserver</button>
+            </div>
+        </div>
+
+        <!-- Step 3b: Classification form -->
+        <div class="mp-step is-hidden" id="mpStep3b">
+            <h2><i class="icon-file-text"></i> Classer la pièce jointe</h2>
+            <div class="form-group">
+                <label>Type de fichier</label>
+                <select id="mpDocType">
+                    <option value="">-- Choisir --</option>
+                    <option value="article">Article</option>
+                    <option value="brouillon">Brouillon</option>
+                    <option value="communiqué">Communiqué</option>
+                    <option value="compte-rendu">Compte-rendu</option>
+                    <option value="contrat">Contrat</option>
+                    <option value="curriculum vitae">Curriculum vitae</option>
+                    <option value="devis">Devis</option>
+                    <option value="facture">Facture</option>
+                    <option value="justificatif">Justificatif</option>
+                    <option value="lettre de motivation">Lettre de motivation</option>
+                    <option value="manuscrit">Manuscrit</option>
+                    <option value="mémoire">Mémoire</option>
+                    <option value="note">Note</option>
+                    <option value="planning">Planning</option>
+                    <option value="présentation">Présentation</option>
+                    <option value="rapport">Rapport</option>
+                    <option value="recueil">Recueil</option>
+                    <option value="reçu">Reçu</option>
+                    <option value="requête">Requête</option>
+                    <option value="résultats">Résultats</option>
+                    <option value="statistiques">Statistiques</option>
+                    <option value="synopsis">Synopsis</option>
+                    <option value="thèse">Thèse</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Niveau 1</label>
+                <select id="mpN1" onchange="mpUpdateN2()">
+                    <option value="">-- Choisir --</option>
+                    <option value="EV">EV</option>
+                    <option value="Histologie">Histologie</option>
+                    <option value="imagerie">Imagerie</option>
+                    <option value="multimodal">Multimodal</option>
+                    <option value="nexomedis">Nexomedis</option>
+                    <option value="revue ia santé">Revue IA santé</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Niveau 2</label>
+                <select id="mpN2">
+                    <option value="">-- Choisir N1 d'abord --</option>
+                </select>
+            </div>
+            <div class="modal-actions mp-actions-center">
+                <button onclick="mpCancelClassification()">Annuler</button>
+                <button class="btn-primary" onclick="mpSaveAttachment()"><i class="icon-save"></i> Valider &amp; Suivant</button>
+            </div>
+        </div>
+
+        <!-- Step Done -->
+        <div class="mp-step is-hidden" id="mpStepDone">
+            <h2><i class="icon-check"></i> Traitement terminé</h2>
+            <p>Tous les mails ont été traités.</p>
+            <div class="modal-actions mp-actions-center">
+                <button class="btn-primary" onclick="closeMailProcess()">Fermer</button>
+            </div>
         </div>
     </div>
 </div>
