@@ -568,21 +568,24 @@
 <!-- Mail Processing Wizard Modal -->
 <div class="modal-overlay" id="mailProcessModal">
     <div class="modal modal-w-900" id="mailProcessContent">
-        <!-- Step 0: Progress header -->
+        <!-- Progress header -->
         <div class="mp-progress">
             <span id="mpCounter">Mail 1/1</span>
             <button class="mp-close-btn" onclick="closeMailProcess()">&times;</button>
         </div>
 
-        <!-- Step 1: Keep or Delete -->
-        <div class="mp-step" id="mpStep1">
-            <h2><i class="icon-mail"></i> Traitement du mail</h2>
-            <div class="mp-mail-info">
+        <!-- Always-visible mail info + preview -->
+        <div class="mp-mail-info" id="mpMailInfoBlock">
+            <div class="mp-mail-meta">
                 <div><strong>De :</strong> <span id="mpFrom"></span></div>
                 <div><strong>Sujet :</strong> <span id="mpSubject"></span></div>
                 <div><strong>Date :</strong> <span id="mpDate"></span></div>
-                <div class="mp-preview" id="mpPreview"></div>
             </div>
+            <div class="mp-preview" id="mpPreview"></div>
+        </div>
+
+        <!-- Step 1: Keep or Delete -->
+        <div class="mp-step" id="mpStep1">
             <div class="modal-actions mp-actions-center">
                 <button class="btn-danger" onclick="mpDeleteFromServer()"><i class="icon-trash-2"></i> Supprimer du serveur</button>
                 <button class="btn-primary" onclick="mpKeepMail()"><i class="icon-check"></i> Conserver</button>
@@ -591,9 +594,8 @@
 
         <!-- Step 2: Text important? -->
         <div class="mp-step is-hidden" id="mpStep2">
-            <h2><i class="icon-file-text"></i> Contenu important ?</h2>
-            <p>Le contenu texte de ce mail est-il important et doit être conservé ?</p>
             <div class="modal-actions mp-actions-center">
+                <span style="margin-right:auto;font-weight:500;">Le contenu texte est-il important ?</span>
                 <button onclick="mpTextNotImportant()">Non</button>
                 <button class="btn-primary" onclick="mpTextImportant()"><i class="icon-sparkles"></i> Oui, résumer avec IA</button>
             </div>
@@ -601,7 +603,6 @@
 
         <!-- Step 2b: AI Summary -->
         <div class="mp-step is-hidden" id="mpStep2b">
-            <h2><i class="icon-sparkles"></i> Résumé IA</h2>
             <div id="mpSummaryLoading" class="mp-loading">Génération du résumé en cours…</div>
             <textarea id="mpSummaryText" class="mp-summary-textarea" readonly></textarea>
             <div class="modal-actions mp-actions-center">
@@ -612,7 +613,6 @@
 
         <!-- Step 3: Attachment processing -->
         <div class="mp-step is-hidden" id="mpStep3">
-            <h2><i class="icon-paperclip"></i> Pièce jointe</h2>
             <div class="mp-att-info">
                 <div><strong>Fichier :</strong> <span id="mpAttName"></span></div>
             </div>
@@ -625,63 +625,64 @@
 
         <!-- Step 3b: Classification form -->
         <div class="mp-step is-hidden" id="mpStep3b">
-            <h2><i class="icon-file-text"></i> Classer la pièce jointe</h2>
-            <div class="form-group">
-                <label>Type de fichier</label>
-                <select id="mpDocType">
-                    <option value="">-- Choisir --</option>
-                    <option value="article">Article</option>
-                    <option value="brouillon">Brouillon</option>
-                    <option value="communiqué">Communiqué</option>
-                    <option value="compte-rendu">Compte-rendu</option>
-                    <option value="contrat">Contrat</option>
-                    <option value="curriculum vitae">Curriculum vitae</option>
-                    <option value="devis">Devis</option>
-                    <option value="facture">Facture</option>
-                    <option value="justificatif">Justificatif</option>
-                    <option value="lettre de motivation">Lettre de motivation</option>
-                    <option value="manuscrit">Manuscrit</option>
-                    <option value="mémoire">Mémoire</option>
-                    <option value="note">Note</option>
-                    <option value="planning">Planning</option>
-                    <option value="présentation">Présentation</option>
-                    <option value="rapport">Rapport</option>
-                    <option value="recueil">Recueil</option>
-                    <option value="reçu">Reçu</option>
-                    <option value="requête">Requête</option>
-                    <option value="résultats">Résultats</option>
-                    <option value="statistiques">Statistiques</option>
-                    <option value="synopsis">Synopsis</option>
-                    <option value="thèse">Thèse</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Niveau 1</label>
-                <select id="mpN1" onchange="mpUpdateN2()">
-                    <option value="">-- Choisir --</option>
-                </select>
-                <div class="mail-actions mt-05">
-                    <button onclick="mpAddN1DuringProcess()"><i class="icon-plus"></i> Ajouter un N1</button>
+            <div class="mp-classify-form">
+                <div class="form-group">
+                    <label>Type de fichier</label>
+                    <select id="mpDocType">
+                        <option value="">-- Choisir --</option>
+                        <option value="article">Article</option>
+                        <option value="brouillon">Brouillon</option>
+                        <option value="communiqué">Communiqué</option>
+                        <option value="compte-rendu">Compte-rendu</option>
+                        <option value="contrat">Contrat</option>
+                        <option value="curriculum vitae">Curriculum vitae</option>
+                        <option value="devis">Devis</option>
+                        <option value="facture">Facture</option>
+                        <option value="justificatif">Justificatif</option>
+                        <option value="lettre de motivation">Lettre de motivation</option>
+                        <option value="manuscrit">Manuscrit</option>
+                        <option value="mémoire">Mémoire</option>
+                        <option value="note">Note</option>
+                        <option value="planning">Planning</option>
+                        <option value="présentation">Présentation</option>
+                        <option value="rapport">Rapport</option>
+                        <option value="recueil">Recueil</option>
+                        <option value="reçu">Reçu</option>
+                        <option value="requête">Requête</option>
+                        <option value="résultats">Résultats</option>
+                        <option value="statistiques">Statistiques</option>
+                        <option value="synopsis">Synopsis</option>
+                        <option value="thèse">Thèse</option>
+                    </select>
                 </div>
-            </div>
-            <div class="form-group">
-                <label>Niveau 2</label>
-                <select id="mpN2">
-                    <option value="">-- Choisir N1 d'abord --</option>
-                </select>
-                <div class="mail-actions mt-05">
-                    <button onclick="mpAddN2DuringProcess()"><i class="icon-plus"></i> Ajouter un N2</button>
+                <div class="form-group">
+                    <label>Niveau 1</label>
+                    <select id="mpN1" onchange="mpUpdateN2()">
+                        <option value="">-- Choisir --</option>
+                    </select>
+                    <div class="mail-actions mt-05">
+                        <button onclick="mpAddN1DuringProcess()"><i class="icon-plus"></i> Ajouter un N1</button>
+                    </div>
                 </div>
-            </div>
-            <div class="form-group">
-                <label>Description courte (obligatoire, 1 ligne)</label>
-                <input type="text" id="mpAttachmentDescription" maxlength="160" placeholder="Ex: Releve bancaire mars 2026">
-            </div>
-            <div class="form-group">
-                <label>Fichier prêt à glisser-déposer</label>
-                <div id="mpPreparedDropZone" class="attachment-zone" style="min-height:56px;cursor:default">
-                    <p id="mpPreparedPlaceholder" class="attachment-placeholder" style="margin:0">Prépare le fichier puis glisse-le directement dans ton logiciel documentaire.</p>
-                    <div id="mpPreparedAttachment" class="attachment-list"></div>
+                <div class="form-group">
+                    <label>Niveau 2</label>
+                    <select id="mpN2">
+                        <option value="">-- Choisir N1 d'abord --</option>
+                    </select>
+                    <div class="mail-actions mt-05">
+                        <button onclick="mpAddN2DuringProcess()"><i class="icon-plus"></i> Ajouter un N2</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description courte (obligatoire, 1 ligne)</label>
+                    <input type="text" id="mpAttachmentDescription" maxlength="160" placeholder="Ex: Releve bancaire mars 2026">
+                </div>
+                <div class="form-group">
+                    <label>Fichier prêt à glisser-déposer</label>
+                    <div id="mpPreparedDropZone" class="attachment-zone" style="min-height:56px;cursor:default">
+                        <p id="mpPreparedPlaceholder" class="attachment-placeholder" style="margin:0">Prépare le fichier puis glisse-le directement dans ton logiciel documentaire.</p>
+                        <div id="mpPreparedAttachment" class="attachment-list"></div>
+                    </div>
                 </div>
             </div>
             <div class="modal-actions mp-actions-center">

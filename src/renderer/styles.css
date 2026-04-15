@@ -693,7 +693,8 @@
         .mp-mail-info div { margin-bottom: 0.3rem; }
         .mp-preview {
             margin-top: 0.5rem;
-            max-height: 42vh;
+            flex: 1;
+            min-height: 0;
             overflow-y: auto;
             background: #ffffff;
             border: 1px solid #d1d5db;
@@ -758,19 +759,48 @@
             font-size: 0.85rem;
         }
         #mailProcessModal .modal {
-            width: min(96vw, 980px);
+            width: 96vw;
+            max-width: 1400px;
+            height: 92vh;
             max-height: 92vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem 1.5rem;
+        }
+
+        #mailProcessModal .mp-mail-info {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #mailProcessModal .mp-mail-meta {
+            flex-shrink: 0;
+        }
+
+        #mailProcessModal .mp-step {
+            flex-shrink: 0;
+        }
+        #mailProcessModal .mp-step.is-hidden {
+            display: none;
+        }
+
+        /* Step 3b (classify): scrollable form alongside the mail preview */
+        #mailProcessModal #mpStep3b .mp-classify-form {
             overflow-y: auto;
+            max-height: 30vh;
+            flex-shrink: 0;
         }
 
         @media (max-width: 900px) {
             #mailProcessModal .modal {
-                width: 96vw;
-                max-height: 94vh;
-                padding: 1rem;
-            }
-            .mp-preview {
-                max-height: 36vh;
+                width: 100vw;
+                height: 100vh;
+                max-height: 100vh;
+                border-radius: 0;
+                padding: 0.75rem;
             }
         }
 

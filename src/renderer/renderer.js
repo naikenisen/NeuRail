@@ -1482,6 +1482,9 @@ let mpPendingDeleteCurrentMail = false;
 function mpShowStep(stepId) {
     document.querySelectorAll('#mailProcessContent .mp-step').forEach(el => el.classList.add('is-hidden'));
     document.getElementById(stepId).classList.remove('is-hidden');
+    // Hide mail info block on the "done" step
+    const infoBlock = document.getElementById('mpMailInfoBlock');
+    if (infoBlock) infoBlock.style.display = stepId === 'mpStepDone' ? 'none' : '';
 }
 
 function mpSanitizePreviewHtml(html) {
