@@ -592,22 +592,16 @@
             </div>
         </div>
 
-        <!-- Step 2: Text important? -->
+        <!-- Step 2: Copy text / optional AI summary -->
         <div class="mp-step is-hidden" id="mpStep2">
-            <div class="modal-actions mp-actions-center">
-                <span style="margin-right:auto;font-weight:500;">Le contenu texte est-il important ?</span>
-                <button onclick="mpTextNotImportant()">Non</button>
-                <button class="btn-primary" onclick="mpTextImportant()"><i class="icon-sparkles"></i> Oui, résumer avec IA</button>
+            <div id="mpSummaryBlock" style="display:none">
+                <div id="mpSummaryLoading" class="mp-loading">Génération du résumé en cours…</div>
+                <textarea id="mpSummaryText" class="mp-summary-textarea" readonly></textarea>
             </div>
-        </div>
-
-        <!-- Step 2b: AI Summary -->
-        <div class="mp-step is-hidden" id="mpStep2b">
-            <div id="mpSummaryLoading" class="mp-loading">Génération du résumé en cours…</div>
-            <textarea id="mpSummaryText" class="mp-summary-textarea" readonly></textarea>
             <div class="modal-actions mp-actions-center">
-                <button class="btn-primary" onclick="mpCopySummary()"><i class="icon-copy"></i> Copier dans le presse-papier</button>
-                <button onclick="mpAfterSummary()">Suivant</button>
+                <button onclick="mpTextImportant()" id="mpBtnSummarize"><i class="icon-sparkles"></i> Résumer avec IA</button>
+                <button id="mpBtnCopySummary" style="display:none" onclick="mpCopySummary()"><i class="icon-copy"></i> Copier le résumé</button>
+                <button class="btn-primary" onclick="mpAfterSummary()"><i class="icon-arrow-right"></i> Suivant</button>
             </div>
         </div>
 

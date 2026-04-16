@@ -1838,16 +1838,30 @@ async function mpDeleteFromServer() {
 
 function mpKeepMail() {
     mpPendingDeleteCurrentMail = false;
+    // Reset summary block for fresh step
+    const block = document.getElementById('mpSummaryBlock');
+    const textEl = document.getElementById('mpSummaryText');
+    const btnSummarize = document.getElementById('mpBtnSummarize');
+    const btnCopy = document.getElementById('mpBtnCopySummary');
+    if (block) block.style.display = 'none';
+    if (textEl) { textEl.value = ''; textEl.style.display = 'none'; }
+    if (btnSummarize) { btnSummarize.style.display = ''; btnSummarize.disabled = false; }
+    if (btnCopy) btnCopy.style.display = 'none';
     mpShowStep('mpStep2');
 }
 
 async function mpTextImportant() {
-    mpShowStep('mpStep2b');
+    const block = document.getElementById('mpSummaryBlock');
     const loadingEl = document.getElementById('mpSummaryLoading');
     const textEl = document.getElementById('mpSummaryText');
+    const btnSummarize = document.getElementById('mpBtnSummarize');
+    const btnCopy = document.getElementById('mpBtnCopySummary');
+
+    block.style.display = '';
     loadingEl.style.display = 'block';
     textEl.value = '';
     textEl.style.display = 'none';
+    if (btnSummarize) btnSummarize.disabled = true;
 
     try {
         const r = await fetch('/api/mail/summarize', {
@@ -1870,10 +1884,8 @@ async function mpTextImportant() {
     }
     loadingEl.style.display = 'none';
     textEl.style.display = 'block';
-}
-
-function mpTextNotImportant() {
-    mpCheckAttachments();
+    if (btnCopy) btnCopy.style.display = '';
+    if (btnSummarize) btnSummarize.style.display = 'none';
 }
 
 async function mpCopySummary() {

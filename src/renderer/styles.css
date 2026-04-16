@@ -142,7 +142,7 @@
         ::-webkit-scrollbar-thumb:hover { background: var(--accent-soft); }
 
         /* Re-enable selection on editable content */
-        input, textarea, [contenteditable], .task-label, .terminal-output, .mail-field textarea, .mail-field input {
+        input, textarea, [contenteditable], .task-label, .terminal-output, .mail-field textarea, .mail-field input, .mp-preview {
             user-select: text;
             -webkit-user-select: text;
         }
