@@ -627,55 +627,13 @@
         <div class="mp-step is-hidden" id="mpStep3b">
             <div class="mp-classify-form">
                 <div class="form-group">
-                    <label>Type de fichier</label>
-                    <select id="mpDocType">
-                        <option value="">-- Choisir --</option>
-                        <option value="article">Article</option>
-                        <option value="brouillon">Brouillon</option>
-                        <option value="communiqué">Communiqué</option>
-                        <option value="compte-rendu">Compte-rendu</option>
-                        <option value="contrat">Contrat</option>
-                        <option value="curriculum vitae">Curriculum vitae</option>
-                        <option value="devis">Devis</option>
-                        <option value="facture">Facture</option>
-                        <option value="justificatif">Justificatif</option>
-                        <option value="lettre de motivation">Lettre de motivation</option>
-                        <option value="manuscrit">Manuscrit</option>
-                        <option value="mémoire">Mémoire</option>
-                        <option value="note">Note</option>
-                        <option value="planning">Planning</option>
-                        <option value="présentation">Présentation</option>
-                        <option value="rapport">Rapport</option>
-                        <option value="recueil">Recueil</option>
-                        <option value="reçu">Reçu</option>
-                        <option value="requête">Requête</option>
-                        <option value="résultats">Résultats</option>
-                        <option value="statistiques">Statistiques</option>
-                        <option value="synopsis">Synopsis</option>
-                        <option value="thèse">Thèse</option>
-                    </select>
+                    <label>Nom court (2 mots séparés par _)</label>
+                    <input type="text" id="mpShortName" maxlength="40" placeholder="Ex: Facture_EDF" pattern="^[A-Za-zÀ-ÿ0-9]+_[A-Za-zÀ-ÿ0-9]+$" style="max-width:260px">
+                    <small style="color:var(--text-muted);display:block;margin-top:0.2rem">Fichier renommé en : <code id="mpFilenamePreview">AAAA_MM_JJ_Mot1_Mot2.ext</code></small>
                 </div>
                 <div class="form-group">
-                    <label>Niveau 1</label>
-                    <select id="mpN1" onchange="mpUpdateN2()">
-                        <option value="">-- Choisir --</option>
-                    </select>
-                    <div class="mail-actions mt-05">
-                        <button onclick="mpAddN1DuringProcess()"><i class="icon-plus"></i> Ajouter un N1</button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Niveau 2</label>
-                    <select id="mpN2">
-                        <option value="">-- Choisir N1 d'abord --</option>
-                    </select>
-                    <div class="mail-actions mt-05">
-                        <button onclick="mpAddN2DuringProcess()"><i class="icon-plus"></i> Ajouter un N2</button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Description courte (obligatoire, 1 ligne)</label>
-                    <input type="text" id="mpAttachmentDescription" maxlength="160" placeholder="Ex: Releve bancaire mars 2026">
+                    <label>Description longue (obligatoire)</label>
+                    <textarea id="mpAttachmentDescription" rows="3" maxlength="500" placeholder="Décrivez précisément le contenu du document..."></textarea>
                 </div>
                 <div class="form-group">
                     <label>Fichier prêt à glisser-déposer</label>

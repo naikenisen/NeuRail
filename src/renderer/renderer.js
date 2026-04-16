@@ -1466,7 +1466,7 @@ function getActiveSignatureHtml() {
 /* ═══════════════════════════════════════════════════════
    Mail Processing Wizard
    ═══════════════════════════════════════════════════════ */
-const MP_RELEVANT_EXTS = ['.odt', '.docx', '.pdf', '.xlsx', '.csv'];
+const MP_RELEVANT_EXTS = ['.odt', '.docx', '.pdf', '.xlsx', '.csv', '.pptx'];
 
 let mpQueue = [];
 let mpIndex = 0;
@@ -1659,19 +1659,28 @@ function mpDateForFilename(mailDate) {
     return new Date().toISOString().slice(0, 10);
 }
 
-function mpBuildClassifiedFilename(attName, docType, n1, n2, sender, mailDate) {
+function mpBuildClassifiedFilename(attName, shortName, mailDate) {
     const extIdx = String(attName || '').lastIndexOf('.');
     const ext = extIdx >= 0 ? String(attName).slice(extIdx).toLowerCase() : '';
-    const parts = [
-        mpDateForFilename(mailDate),
-        mpSanitizeForFilename(docType, 40) || 'document',
-        mpAuthorForFilename(sender),
-    ];
-    const safeN1 = mpSanitizeForFilename(n1, 40);
-    const safeN2 = mpSanitizeForFilename(n2, 40);
-    if (safeN1) parts.push(safeN1);
-    if (safeN2) parts.push(safeN2);
-    return parts.join('-') + ext;
+    const datePart = mpDateForFilename(mailDate).replace(/-/g, '_');
+    const safeName = String(shortName || 'Sans_Nom').trim();
+    return `${datePart}_${safeName}${ext}`;
+}
+
+function mpUpdateFilenamePreview() {
+    const preview = document.getElementById('mpFilenamePreview');
+    if (!preview) return;
+    const shortName = (document.getElementById('mpShortName')?.value || '').trim();
+    const mailDate = mpCurrentMail?.date || '';
+    const datePart = mpDateForFilename(mailDate).replace(/-/g, '_');
+    const att = mpRelevantAtts?.[mpAttIndex];
+    const extIdx = att ? String(att.name || '').lastIndexOf('.') : -1;
+    const ext = extIdx >= 0 ? String(att.name).slice(extIdx).toLowerCase() : '';
+    if (shortName && /^[^\s_]+_[^\s_]+$/.test(shortName)) {
+        preview.textContent = `${datePart}_${shortName}${ext}`;
+    } else {
+        preview.textContent = `${datePart}_Mot1_Mot2${ext}`;
+    }
 }
 
 function mpClearPreparedAttachment() {
@@ -1710,9 +1719,9 @@ function mpRenderPreparedAttachment() {
     link.addEventListener('dragstart', (e) => {
         const descInput = document.getElementById('mpAttachmentDescription');
         const desc = String(descInput?.value || '').trim();
-        if (!desc || /[\r\n]/.test(desc)) {
+        if (!desc) {
             e.preventDefault();
-            showToast('Ajoute une description courte sur une ligne avant le glisser-deposer.', 'warning', 3200);
+            showToast('Ajoute une description longue avant le glisser-déposer.', 'warning', 3200);
             return;
         }
 
@@ -1921,10 +1930,10 @@ function mpDiscardAttachment() {
 function mpKeepAttachment() {
     mpClearPreparedAttachment();
     mpShowStep('mpStep3b');
-    document.getElementById('mpDocType').value = '';
+    const shortNameInput = document.getElementById('mpShortName');
+    if (shortNameInput) shortNameInput.value = '';
     document.getElementById('mpAttachmentDescription').value = '';
-    mpRenderN1Options('');
-    mpUpdateN2();
+    mpUpdateFilenamePreview();
 }
 
 function mpRenderN1Options(selected = '') {
@@ -2014,14 +2023,15 @@ function mpCancelClassification() {
 }
 
 async function mpPrepareAttachmentForDrop() {
-    const docType = document.getElementById('mpDocType').value;
-    const n1 = document.getElementById('mpN1').value;
-    const n2 = document.getElementById('mpN2').value;
+    const shortName = String(document.getElementById('mpShortName')?.value || '').trim();
     const description = String(document.getElementById('mpAttachmentDescription')?.value || '').trim();
 
-    if (!docType) { showToast('Choisis un type de fichier.', 'error'); return; }
-    if (!description || /[\r\n]/.test(description)) {
-        showToast('La description courte sur une ligne est obligatoire.', 'error');
+    if (!shortName || !/^[^\s_]+_[^\s_]+$/.test(shortName)) {
+        showToast('Le nom court doit contenir exactement 2 mots séparés par _ (ex: Facture_EDF).', 'error');
+        return;
+    }
+    if (!description) {
+        showToast('La description longue est obligatoire.', 'error');
         return;
     }
     if (!mpCurrentMail || !mpRelevantAtts[mpAttIndex]) return;
@@ -2029,10 +2039,7 @@ async function mpPrepareAttachmentForDrop() {
     const att = mpRelevantAtts[mpAttIndex];
     const filename = mpBuildClassifiedFilename(
         att.name,
-        docType,
-        n1,
-        n2,
-        mpCurrentMail.from_email || mpCurrentMail.from_name || 'inconnu',
+        shortName,
         mpCurrentMail.date || ''
     );
 
@@ -3586,6 +3593,12 @@ function fileToBase64(file) {
             zone.style.borderColor = 'var(--card-border)';
             if (e.dataTransfer.files.length) handleAttachmentFiles(e.dataTransfer.files);
         });
+
+        // Live filename preview for short name field
+        const shortNameInput = document.getElementById('mpShortName');
+        if (shortNameInput) {
+            shortNameInput.addEventListener('input', () => mpUpdateFilenamePreview());
+        }
     });
 })();
 
