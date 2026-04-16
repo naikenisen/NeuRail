@@ -3597,7 +3597,24 @@ function fileToBase64(file) {
         // Live filename preview for short name field
         const shortNameInput = document.getElementById('mpShortName');
         if (shortNameInput) {
-            shortNameInput.addEventListener('input', () => mpUpdateFilenamePreview());
+            shortNameInput.addEventListener('input', () => {
+                const el = shortNameInput;
+                const pos = el.selectionStart;
+                // Replace spaces with _
+                let v = el.value.replace(/\s+/g, '_');
+                // Collapse multiple consecutive _
+                v = v.replace(/_+/g, '_');
+                // Allow at most one _ (exactly 2 words)
+                const parts = v.split('_');
+                if (parts.length > 2) {
+                    v = parts[0] + '_' + parts.slice(1).join('');
+                }
+                if (v !== el.value) {
+                    el.value = v;
+                    el.setSelectionRange(pos, pos);
+                }
+                mpUpdateFilenamePreview();
+            });
         }
     });
 })();

@@ -805,11 +805,7 @@ ipcMain.handle('drag:writeTempFileFromBase64', async (_event, payload = {}) => {
     ensureDragTempDir();
     cleanupOldDragFiles();
 
-    const dotIdx = rawName.lastIndexOf('.');
-    const stem = dotIdx > 0 ? rawName.slice(0, dotIdx) : rawName;
-    const ext = dotIdx > 0 ? rawName.slice(dotIdx) : '';
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const finalName = `${stem}-${unique}${ext}`;
+    const finalName = rawName;
     const filePath = path.join(DRAG_TEMP_DIR, finalName);
 
     const fileBuffer = Buffer.from(base64, 'base64');
