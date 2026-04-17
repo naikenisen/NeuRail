@@ -1,7 +1,0 @@
-# Python dependencies used by the src/backend/ modules
-# (standard library modules are intentionally not listed)
-html2text>=2020.1.16
-
-# --- AI / LLM ---
-langchain-google-genai>=1.0.0
-python-dotenv>=1.0.0

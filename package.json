@@ -6,11 +6,19 @@
     "name": "Isen Naiken",
     "email": "isen.naiken@nexomedis.com"
   },
-  "main": "src/main/main.js",
+  "main": "electron-main.cjs",
   "scripts": {
     "start": "electron .",
+    "test": "npm run test:node",
+    "test:node": "tsx --test tests/node/*.test.ts",
+    "typecheck": "npm run typecheck:main && npm run typecheck:renderer && npm run typecheck:tests",
+    "typecheck:main": "tsc -p config/tsconfig/tsconfig.main.json",
+    "typecheck:renderer": "tsc -p config/tsconfig/tsconfig.renderer.json",
+    "typecheck:tests": "tsc -p config/tsconfig/tsconfig.tests.json",
+    "architecture:check": "tsx scripts/check-architecture-boundaries.ts",
     "icons:generate": "mkdir -p build/icons && npx --yes icon-gen -i assets/logo.png -o build --ico --icns && mv -f build/app.icns build/icon.icns && mv -f build/app.ico build/icon.ico && for s in 16 24 32 48 64 96 128 256 512 1024; do convert assets/logo.png -resize ${s}x${s} build/icons/${s}x${s}.png; done && cp -f build/icons/512x512.png build/icon.png",
     "build": "electron-builder --linux",
+    "build:deb": "electron-builder --linux deb",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:all": "electron-builder --linux --mac --win",
@@ -24,11 +32,11 @@
       "output": "dist"
     },
     "files": [
+      "electron-main.cjs",
       "src/**/*",
       "assets/**/*",
       "data/data.json",
       "data/contacts_complets_v2.csv",
-      "requirements.txt",
       "package.json"
     ],
     "extraResources": [
@@ -41,24 +49,12 @@
         "to": "assets/logo.png"
       },
       {
-        "from": "src/backend",
-        "to": "src/backend"
-      },
-      {
-        "from": "requirements.txt",
-        "to": "requirements.txt"
-      },
-      {
         "from": "data/data.json",
         "to": "data/data.json"
       },
       {
         "from": "data/contacts_complets_v2.csv",
         "to": "data/contacts_complets_v2.csv"
-      },
-      {
-        "from": "tools/drag_helper.py",
-        "to": "tools/drag_helper.py"
       }
     ],
     "linux": {
@@ -67,7 +63,13 @@
         "deb"
       ],
       "category": "Office",
-      "icon": "build/icons"
+      "icon": "build/icons",
+      "executableName": "neurail"
+    },
+    "deb": {
+      "packageName": "neurail",
+      "priority": "optional",
+      "compression": "xz"
     },
     "mac": {
       "target": [
@@ -91,9 +93,13 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.8.3",
+    "@types/node": "^22.15.29",
+    "@types/electron": "^1.6.12"
   },
   "dependencies": {
-    "electron-window-state": "^5.0.3"
+    "electron-window-state": "^5.0.3",
+    "tsx": "^4.20.3"
   }
 }

@@ -1,0 +1,43 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "CommonJS",
+        "moduleResolution": "Node",
+        "strict": true,
+        "noImplicitAny": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "noFallthroughCasesInSwitch": true,
+        "useUnknownInCatchVariables": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true,
+        "resolveJsonModule": true,
+        "baseUrl": "../..",
+        "paths": {
+            "@main/*": [
+                "src/main/*"
+            ],
+            "@renderer/*": [
+                "src/renderer/*"
+            ],
+            "@domain/*": [
+                "src/domain/*"
+            ],
+            "@infrastructure/*": [
+                "src/infrastructure/*"
+            ],
+            "@shared/*": [
+                "src/shared/*"
+            ],
+            "@types/*": [
+                "src/types/*"
+            ],
+            "@tests/*": [
+                "tests/*"
+            ]
+        },
+        "types": [
+            "node"
+        ]
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "lib": [
+            "ES2022",
+            "DOM"
+        ],
+        "noEmit": true,
+        "composite": true
+    },
+    "include": [
+        "../../src/renderer/**/*.ts",
+        "../../src/domain/**/*.ts",
+        "../../src/shared/**/*.ts",
+        "../../src/types/**/*.d.ts"
+    ]
+}

@@ -2,7 +2,7 @@
 
 # NeuRail
 
-Client de bureau Electron et Python pour centraliser la gestion des tâches, des emails, des rappels, de l'archivage et des recherches complexes dans une interface unique.
+Client de bureau Electron et TypeScript pour centraliser la gestion des tâches, des emails, des rappels, de l'archivage et des recherches complexes dans une interface unique.
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)](package.json)
 [![Electron](https://img.shields.io/badge/Electron-33-47848f?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -51,19 +51,19 @@ NeuRail est conçu comme un poste de travail unifié :
 
 ```bash
 sudo apt update
-sudo apt install nodejs npm python3 python3-venv python3-pip
+sudo apt install nodejs npm
 ```
 
 #### Arch Linux
 
 ```bash
-sudo pacman -S nodejs npm python python-pip
+sudo pacman -S nodejs npm
 ```
 
 #### macOS
 
 ```bash
-brew install node python
+brew install node
 ```
 
 > Si Homebrew n'est pas installé : [https://brew.sh](https://brew.sh)
@@ -71,8 +71,7 @@ brew install node python
 #### Windows
 
 1. Télécharger et installer **Node.js** (>= 18 LTS) : [https://nodejs.org](https://nodejs.org)
-2. Télécharger et installer **Python** (>= 3.8) : [https://www.python.org/downloads](https://www.python.org/downloads)
-   - Cocher **"Add Python to PATH"** lors de l'installation.
+2. Vérifier que `npm` est disponible dans le terminal.
 
 ---
 
@@ -86,17 +85,11 @@ cd NeuRail
 # 2. Installer les dépendances Node.js
 npm install
 
-# 3. Créer un environnement virtuel Python et installer les dépendances
-python3 -m venv venv
-source venv/bin/activate        # Linux / macOS
-# .\venv\Scripts\activate       # Windows (PowerShell)
-pip install -r requirements.txt
-
-# 4. Lancer l'application en mode développement
+# 3. Lancer l'application en mode développement
 npm start
 ```
 
-> **Note :** Le serveur Python backend (`server.py`) est automatiquement démarré par le processus principal d'Electron au lancement. Assurez-vous que le port **8080** est disponible.
+> **Note :** Le backend TypeScript est automatiquement démarré par le processus principal d'Electron au lancement. Assurez-vous que le port **8080** est disponible.
 
 ---
 
