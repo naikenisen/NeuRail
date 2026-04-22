@@ -1509,13 +1509,71 @@ function mpSanitizePreviewHtml(html) {
     return doc.body ? doc.body.innerHTML : '';
 }
 
+function splitHeaderEmails(value) {
+    const raw = String(value || '');
+    if (!raw.trim()) return [];
+    return raw
+        .split(',')
+        .map(part => {
+            const m = part.match(/<([^>]+)>/);
+            return (m ? m[1] : part).trim();
+        })
+        .filter(Boolean);
+}
+
+function dedupeEmails(list) {
+    const out = [];
+    const seen = new Set();
+    (list || []).forEach((item) => {
+        const value = String(item || '').trim();
+        if (!value) return;
+        const key = value.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(value);
+    });
+    return out;
+}
+
+function buildReplyAllRecipients(mail) {
+    const myAddr = String(mail?.account || '').trim().toLowerCase();
+    const toRecipients = [];
+    const ccRecipients = [];
+
+    const pushTo = (addr) => {
+        const value = String(addr || '').trim();
+        if (!value) return;
+        const low = value.toLowerCase();
+        if (myAddr && low === myAddr) return;
+        toRecipients.push(value);
+    };
+    const pushCc = (addr) => {
+        const value = String(addr || '').trim();
+        if (!value) return;
+        const low = value.toLowerCase();
+        if (myAddr && low === myAddr) return;
+        ccRecipients.push(value);
+    };
+
+    pushTo(mail?.from_email || '');
+    splitHeaderEmails(mail?.to).forEach(pushTo);
+    splitHeaderEmails(mail?.cc).forEach(pushCc);
+
+    const dedupedTo = dedupeEmails(toRecipients);
+    const toSet = new Set(dedupedTo.map(v => v.toLowerCase()));
+    const dedupedCc = dedupeEmails(ccRecipients).filter(v => !toSet.has(v.toLowerCase()));
+    return { to: dedupedTo, cc: dedupedCc };
+}
+
 function mpRenderMailPreview(mail) {
     const previewEl = document.getElementById('mpPreview');
     if (!previewEl) return;
 
     const bodyHtml = String(mail?.body_html || '').trim();
     if (bodyHtml) {
-        previewEl.innerHTML = mpSanitizePreviewHtml(bodyHtml);
+        previewEl.innerHTML = '<iframe id="mpPreviewFrame" sandbox=""></iframe>';
+        const frame = document.getElementById('mpPreviewFrame');
+        if (frame) frame.srcdoc = bodyHtml;
         return;
     }
 
@@ -1805,6 +1863,8 @@ async function mpProcessCurrent() {
     } catch { mpNextMail(); return; }
 
     document.getElementById('mpFrom').textContent = (mpCurrentMail.from_name || '') + ' <' + (mpCurrentMail.from_email || '') + '>';
+    document.getElementById('mpTo').textContent = mpCurrentMail.to || '-';
+    document.getElementById('mpCc').textContent = mpCurrentMail.cc || '-';
     document.getElementById('mpSubject').textContent = mpCurrentMail.subject || 'Sans sujet';
     document.getElementById('mpDate').textContent = mpCurrentMail.date || '';
     mpRenderMailPreview(mpCurrentMail);
@@ -1895,7 +1955,9 @@ function openMpReplyModal() {
         }
     }
 
-    document.getElementById('mpReplyTo').value = mpCurrentMail.from_email || '';
+    const recipients = buildReplyAllRecipients(mpCurrentMail);
+    document.getElementById('mpReplyTo').value = recipients.to.join(', ');
+    document.getElementById('mpReplyCc').value = recipients.cc.join(', ');
     document.getElementById('mpReplySubject').value = 'Re: ' + (mpCurrentMail.subject || '').replace(/^Re:\s*/i, '');
     document.getElementById('mpReplyBody').value = '';
     document.getElementById('mpReplyPrompt').value = 'Réponse professionnelle, claire et concise.';
@@ -1982,6 +2044,7 @@ async function mpReplyGenerate() {
 async function mpReplySend() {
     const from = document.getElementById('mpReplyFrom').value;
     const to = document.getElementById('mpReplyTo').value.trim();
+    const cc = document.getElementById('mpReplyCc').value.trim();
     const subject = document.getElementById('mpReplySubject').value.trim();
     const bodyDraft = document.getElementById('mpReplyBody').value.trim();
 
@@ -2007,7 +2070,7 @@ async function mpReplySend() {
         const r = await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from, to, subject, body: fullBody, html_body })
+            body: JSON.stringify({ from, to, cc, subject, body: fullBody, html_body })
         });
         const result = await r.json();
         if (result.ok) {
@@ -3151,8 +3214,7 @@ function renderInboxReader(mail) {
                 ${mail.folder === 'sent' ? '<span style="color:var(--accent-green);font-weight:600">📤 Envoyé</span>' : ''}
             </div>
             <div class="inbox-reader-actions">
-                <button onclick="replyToMail('${esc(mail.id)}')"><i class="icon-reply"></i> Répondre</button>
-                <button onclick="replyToMail('${esc(mail.id)}', true)"><i class="icon-reply"></i> Répondre à tous</button>
+                <button onclick="replyToMail('${esc(mail.id)}')"><i class="icon-reply"></i> Répondre à tous</button>
                 <button onclick="forwardMail('${esc(mail.id)}')"><i class="icon-forward"></i> Transférer</button>
                 <button class="danger" onclick="openDeleteMailModal('${esc(mail.id)}')"><i class="icon-trash-2"></i> Supprimer</button>
             </div>
@@ -3218,7 +3280,7 @@ function processMyMails() {
     startMailProcess(ids, false);
 }
 
-function replyToMail(mailId, replyAll) {
+function replyToMail(mailId) {
     const mail = inboxMails.find(m => m.id === mailId);
     if (!mail) return;
     switchTab('mail');
@@ -3226,21 +3288,9 @@ function replyToMail(mailId, replyAll) {
     updateMailComposerState();
     renderMailList();
     // Pre-fill composer
-    mailRecipients = mail.from_email ? [mail.from_email] : [];
-    mailCcRecipients = [];
-
-    if (replyAll) {
-        // Add all To: recipients (except our account) to To
-        const toAddrs = (mail.to || '').split(',').map(e => e.trim()).filter(e => e && e !== mail.account);
-        toAddrs.forEach(addr => {
-            if (!mailRecipients.includes(addr)) mailRecipients.push(addr);
-        });
-        // Add CC recipients
-        if (mail.cc) {
-            const ccAddrs = mail.cc.split(',').map(e => e.trim()).filter(e => e && e !== mail.account);
-            mailCcRecipients = ccAddrs;
-        }
-    }
+    const recipients = buildReplyAllRecipients(mail);
+    mailRecipients = recipients.to;
+    mailCcRecipients = recipients.cc;
 
     renderMailTags();
     renderCcTags();

@@ -686,13 +686,19 @@
         .mp-mail-info {
             background: var(--bg-tertiary);
             border-radius: var(--radius-sm);
-            padding: 0.85rem 1.1rem;
-            margin: 1rem 0;
+            padding: 0.65rem 0.85rem;
+            margin: 0.6rem 0;
             font-size: 0.85rem;
         }
-        .mp-mail-info div { margin-bottom: 0.3rem; }
+        .mp-mail-meta {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.25rem 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .mp-mail-info div { margin-bottom: 0; }
         .mp-preview {
-            margin-top: 0.5rem;
+            margin-top: 0;
             flex: 1;
             min-height: 0;
             overflow-y: auto;
@@ -705,13 +711,12 @@
             padding: 0.85rem;
             word-break: break-word;
         }
-        .mp-preview * {
-            color: #111827 !important;
-            background: transparent !important;
-        }
-        .mp-preview a {
-            color: #1d4ed8 !important;
-            text-decoration: underline;
+        .mp-preview iframe {
+            width: 100%;
+            min-height: 70vh;
+            height: calc(100vh - 230px);
+            border: none;
+            background: #fff;
         }
         .mp-preview img {
             max-width: 100%;
@@ -759,14 +764,14 @@
             font-size: 0.85rem;
         }
         #mailProcessModal .modal {
-            width: 96vw;
-            max-width: 1400px;
-            height: 92vh;
-            max-height: 92vh;
+            width: 99vw;
+            max-width: none;
+            height: 98vh;
+            max-height: 98vh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            padding: 1rem 1.5rem;
+            padding: 0.7rem 1rem;
         }
 
         #mailProcessModal .mp-mail-info {
@@ -800,7 +805,10 @@
                 height: 100vh;
                 max-height: 100vh;
                 border-radius: 0;
-                padding: 0.75rem;
+                padding: 0.5rem;
+            }
+            .mp-mail-meta {
+                grid-template-columns: 1fr;
             }
         }
 

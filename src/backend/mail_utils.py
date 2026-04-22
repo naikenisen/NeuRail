@@ -1,5 +1,6 @@
 import email as email_lib
 import email.policy
+import base64
 import hashlib
 import os
 import random
@@ -145,6 +146,7 @@ def unique_eml_filename_from_subject(subject, prefix=""):
 def extract_bodies(msg):
     body_text = ""
     body_html = ""
+    cid_payloads = {}
     h = None
     if HAS_HTML2TEXT:
         h = html2text.HTML2Text()
@@ -156,7 +158,28 @@ def extract_bodies(msg):
         content_disposition = str(part.get("Content-Disposition", ""))
 
         if "attachment" in content_disposition:
+            content_id = str(part.get("Content-ID", "") or "").strip().strip("<>")
+            if content_id:
+                try:
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        mime = part.get_content_type() or "application/octet-stream"
+                        encoded = base64.b64encode(payload).decode("ascii")
+                        cid_payloads[content_id.lower()] = f"data:{mime};base64,{encoded}"
+                except Exception:
+                    pass
             continue
+
+        content_id = str(part.get("Content-ID", "") or "").strip().strip("<>")
+        if content_id:
+            try:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    mime = part.get_content_type() or "application/octet-stream"
+                    encoded = base64.b64encode(payload).decode("ascii")
+                    cid_payloads[content_id.lower()] = f"data:{mime};base64,{encoded}"
+            except Exception:
+                pass
 
         if content_type == "text/plain":
             if not body_text:
@@ -177,6 +200,14 @@ def extract_bodies(msg):
             body_text = h.handle(body_html)
         except Exception:
             body_text = ""
+
+    if body_html and cid_payloads:
+        # Replace inline cid: links with data URLs so images render in previews.
+        def _replace_cid(match):
+            cid_key = str(match.group(1) or "").strip().strip("<>").lower()
+            return cid_payloads.get(cid_key, match.group(0))
+
+        body_html = re.sub(r"cid:([^\"'\s>]+)", _replace_cid, body_html, flags=re.IGNORECASE)
 
     return body_text, body_html
 

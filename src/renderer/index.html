@@ -578,6 +578,8 @@
         <div class="mp-mail-info" id="mpMailInfoBlock">
             <div class="mp-mail-meta">
                 <div><strong>De :</strong> <span id="mpFrom"></span></div>
+                <div><strong>À :</strong> <span id="mpTo"></span></div>
+                <div><strong>Cc :</strong> <span id="mpCc"></span></div>
                 <div><strong>Sujet :</strong> <span id="mpSubject"></span></div>
                 <div><strong>Date :</strong> <span id="mpDate"></span></div>
             </div>
@@ -588,8 +590,8 @@
         <div class="mp-step" id="mpStep1">
             <div class="modal-actions mp-actions-center">
                 <button class="btn-danger" onclick="mpDeleteFromServer()"><i class="icon-trash-2"></i> Supprimer du serveur</button>
-                <button class="btn-reply-delete" onclick="mpReplyAndDelete()"><i class="icon-reply"></i> Répondre &amp; Supprimer</button>
-                <button class="btn-reply-keep" onclick="mpReplyAndKeep()"><i class="icon-reply"></i> Répondre &amp; Conserver</button>
+                <button class="btn-reply-delete" onclick="mpReplyAndDelete()"><i class="icon-reply"></i> Répondre à tous &amp; Supprimer</button>
+                <button class="btn-reply-keep" onclick="mpReplyAndKeep()"><i class="icon-reply"></i> Répondre à tous &amp; Conserver</button>
                 <button class="btn-primary" onclick="mpKeepMail()"><i class="icon-check"></i> Conserver</button>
             </div>
         </div>
@@ -661,7 +663,7 @@
 <!-- Reply in Mail Process Modal -->
 <div class="mp-reply-overlay" id="mpReplyModal" style="display:none" onclick="if(event.target===this)closeMpReplyModal()">
     <div class="mp-reply-modal">
-        <h3><i class="icon-reply"></i> Répondre au mail</h3>
+        <h3><i class="icon-reply"></i> Répondre à tous</h3>
         <div class="mp-reply-field">
             <label>Expéditeur</label>
             <select id="mpReplyFrom"></select>
@@ -669,6 +671,10 @@
         <div class="mp-reply-field">
             <label>Destinataires</label>
             <input type="text" id="mpReplyTo" readonly>
+        </div>
+        <div class="mp-reply-field">
+            <label>Cc</label>
+            <input type="text" id="mpReplyCc" readonly>
         </div>
         <div class="mp-reply-field">
             <label>Sujet</label>
