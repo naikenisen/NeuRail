@@ -36,6 +36,7 @@ from app_config import (
     PORT,
     PROJECT_ROOT,
     RENDERER_INDEX,
+    SENT_DIR,
 )
 
 from account_store import (
@@ -139,7 +140,7 @@ def _build_annuaire():
                 directory[email_lower]["name"] = c["name"]
 
     # 2) Extraire les personnes depuis les fichiers .eml des dossiers mails + commercial
-    for source_dir in (MAILS_DIR, COMMERCIAL_DIR):
+    for source_dir in (MAILS_DIR, COMMERCIAL_DIR, SENT_DIR):
         if not os.path.isdir(source_dir):
             continue
         for fname in os.listdir(source_dir):
@@ -263,6 +264,7 @@ def _get_app_install_config() -> dict:
             "contacts_csv": CONTACTS_CSV,
             "mails_dir": MAILS_DIR,
             "commercial_dir": COMMERCIAL_DIR,
+            "sent_dir": SENT_DIR,
             "vault_dir": MAILS_DIR,
             "log_file": LOG_FILE,
         },
@@ -291,12 +293,14 @@ def _save_app_install_config(payload: dict) -> None:
 
     mails_dir = _clean_path(paths_in.get("mails_dir", ""), MAILS_DIR)
     commercial_dir = _clean_path(paths_in.get("commercial_dir", ""), COMMERCIAL_DIR)
+    sent_dir = _clean_path(paths_in.get("sent_dir", ""), SENT_DIR)
     vault_dir = mails_dir
 
     runtime_cfg = _read_runtime_config_file()
     runtime_cfg["paths"] = {
         "mails_dir": mails_dir,
         "commercial_dir": commercial_dir,
+        "sent_dir": sent_dir,
         "vault_dir": vault_dir,
     }
     runtime_cfg["updated_at"] = datetime.utcnow().isoformat() + "Z"
@@ -304,6 +308,7 @@ def _save_app_install_config(payload: dict) -> None:
     os.makedirs(APP_DATA_DIR, exist_ok=True)
     os.makedirs(mails_dir, exist_ok=True)
     os.makedirs(commercial_dir, exist_ok=True)
+    os.makedirs(sent_dir, exist_ok=True)
 
     with open(APP_RUNTIME_CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(runtime_cfg, f, ensure_ascii=False, indent=2)
@@ -609,6 +614,18 @@ def refresh_and_classify_local_mailboxes():
     )
     total_new += n2
     all_errors.extend(e2)
+
+    n3, e3 = ingest_manual_eml_files(
+        load_inbox_index_fn=load_inbox_index,
+        save_inbox_index_fn=save_inbox_index,
+        compute_mail_id_fn=compute_mail_id,
+        parse_email_metadata_fn=parse_email_metadata,
+        mails_dir=SENT_DIR,
+        mailbox="sent",
+        processed_default=True,
+    )
+    total_new += n3
+    all_errors.extend(e3)
 
     inbox = load_inbox_index()
     changed = apply_commercial_filter(inbox)
@@ -1220,6 +1237,7 @@ def send_email_smtp(account, to_addr, subject, body_text, cc="", attachments=Non
         load_inbox_index=load_inbox_index,
         save_inbox_index=save_inbox_index,
         mails_dir=MAILS_DIR,
+        sent_dir=SENT_DIR,
     )
 
 
@@ -1367,8 +1385,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
         if self.path == "/api/inbox/sent":
+            _schedule_mailbox_refresh()
             inbox = load_inbox_index()
-            sent = [m for m in inbox if m.get("folder") == "sent" and not m.get("deleted")]
+            sent = [m for m in inbox if _mailbox_of(m) == "sent" and not m.get("deleted")]
             sent.sort(key=lambda m: m.get("date_ts", 0), reverse=True)
             return self._json(sent)
         if self.path.startswith("/api/mail/attachment?"):

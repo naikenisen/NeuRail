@@ -58,6 +58,7 @@ def ensure_runtime_config_file():
         "paths": {
             "mails_dir": "/home/naiken/mails",
             "commercial_dir": "/home/naiken/commercial",
+            "sent_dir": "/home/naiken/sent",
             "vault_dir": "/home/naiken/mails",
         }
     }
@@ -97,6 +98,8 @@ _PATHS = _RUNTIME.get("paths", {}) if isinstance(_RUNTIME.get("paths", {}), dict
 _default_mails_dir = "/home/naiken/mails"
 # Répertoire de mails commerciaux par défaut
 _default_commercial_dir = "/home/naiken/commercial"
+# Répertoire de mails envoyés par défaut
+_default_sent_dir = "/home/naiken/sent"
 # Répertoire de vault par défaut
 _default_vault_dir = "/home/naiken/mails"
 
@@ -104,6 +107,8 @@ _default_vault_dir = "/home/naiken/mails"
 MAILS_DIR = str(_PATHS.get("mails_dir", _default_mails_dir)).strip() or _default_mails_dir
 # Répertoire de stockage des mails commerciaux
 COMMERCIAL_DIR = str(_PATHS.get("commercial_dir", _default_commercial_dir)).strip() or _default_commercial_dir
+# Répertoire de stockage des mails envoyés
+SENT_DIR = str(_PATHS.get("sent_dir", _default_sent_dir)).strip() or _default_sent_dir
 # Fichier de suivi des UIDs de mails lus
 SEEN_UIDS_FILE = os.path.join(APP_DATA_DIR, "seen_uids.json")
 # Fichier de configuration des comptes email
@@ -116,6 +121,7 @@ GOOGLE_MAIL_SCOPE = "https://mail.google.com/"
 
 os.makedirs(MAILS_DIR, exist_ok=True)
 os.makedirs(COMMERCIAL_DIR, exist_ok=True)
+os.makedirs(SENT_DIR, exist_ok=True)
 
 
 # Crée un modèle .env local dans les données applicatives si absent

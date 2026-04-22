@@ -295,6 +295,7 @@ def send_email_smtp(
     load_inbox_index,
     save_inbox_index,
     mails_dir,
+    sent_dir=None,
 ):
     account = normalize_auth_fields(account)
     smtp_server = account.get("smtp_server", "")
@@ -306,6 +307,7 @@ def send_email_smtp(
     from_addr = account.get("email", username)
     auth_type = account.get("auth_type", "password")
 
+    sent_storage_dir = sent_dir or mails_dir
     msg = MIMEMultipart("mixed")
     msg["From"] = from_addr
     msg["To"] = to_addr
@@ -364,7 +366,7 @@ def send_email_smtp(
         raw_bytes,
         subject,
         unique_eml_filename_from_subject=unique_eml_filename_from_subject,
-        mails_dir=mails_dir,
+        mails_dir=sent_storage_dir,
     )
 
     meta = parse_email_metadata(raw_bytes, from_addr)
@@ -375,7 +377,7 @@ def send_email_smtp(
     meta["deleted"] = False
     meta["folder"] = "sent"
     meta["mailbox"] = "sent"
-    meta["storage_dir"] = mails_dir
+    meta["storage_dir"] = sent_storage_dir
     inbox = load_inbox_index()
     inbox.append(meta)
     save_inbox_index(inbox)

@@ -13,7 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import getaddresses, parsedate_to_datetime
 
-from app_config import COMMERCIAL_DIR, DOWNLOADS, INBOX_INDEX_FILE, MAILS_DIR, SEEN_UIDS_FILE
+from app_config import COMMERCIAL_DIR, DOWNLOADS, INBOX_INDEX_FILE, MAILS_DIR, SEEN_UIDS_FILE, SENT_DIR
 from json_store import atomic_write_json, read_json_with_backup
 
 # Indicateur de disponibilite de la bibliotheque html2text
@@ -35,6 +35,8 @@ def resolve_storage_dir(mail):
     mailbox = str((mail or {}).get("mailbox", "") or "").lower().strip()
     if mailbox == "commercial":
         return COMMERCIAL_DIR
+    if mailbox == "sent":
+        return SENT_DIR
     return MAILS_DIR
 
 
@@ -48,7 +50,7 @@ def resolve_eml_path(mail):
     if os.path.isfile(primary):
         return primary
 
-    for directory in (MAILS_DIR, COMMERCIAL_DIR):
+    for directory in (MAILS_DIR, COMMERCIAL_DIR, SENT_DIR):
         candidate = os.path.join(directory, eml_file)
         if os.path.isfile(candidate):
             return candidate
@@ -137,6 +139,8 @@ def ingest_manual_eml_files(*, load_inbox_index_fn, save_inbox_index_fn, compute
             meta["deleted"] = False
             meta["protocol"] = "local"
             meta["mailbox"] = mailbox
+            if mailbox == "sent":
+                meta["folder"] = "sent"
             meta["storage_dir"] = mails_dir
 
             inbox.append(meta)

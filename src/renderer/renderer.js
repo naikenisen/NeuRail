@@ -3222,7 +3222,7 @@ function launchConfetti() {
 let inboxMails = [];
 let selectedInboxId = null;
 let deleteMailTarget = null;
-let inboxFolder = 'inbox'; // 'inbox' | 'commercial'
+let inboxFolder = 'inbox'; // 'inbox' | 'commercial' | 'sent'
 let autoFetchTimer = null;
 let downloadsFiles = [];
 let selectedDownloadPath = null;
@@ -3942,6 +3942,7 @@ async function loadInbox() {
     try {
         let endpoint = '/api/inbox';
         if (inboxFolder === 'commercial') endpoint = '/api/inbox/commercial';
+        if (inboxFolder === 'sent') endpoint = '/api/inbox/sent';
         const r = await fetch(endpoint);
         if (r.ok) {
             inboxMails = await r.json();
@@ -3958,7 +3959,7 @@ async function loadInbox() {
 }
 
 function setInboxFolder(folder) {
-    if (folder !== 'inbox' && folder !== 'commercial') return;
+    if (folder !== 'inbox' && folder !== 'commercial' && folder !== 'sent') return;
     if (inboxFolder === folder) return;
     inboxFolder = folder;
     selectedInboxId = null;
@@ -3974,10 +3975,12 @@ function updateInboxFolderActions() {
     const isCommercial = inboxFolder === 'commercial';
     const inboxBtn = document.getElementById('inboxFolderInboxBtn');
     const commercialBtn = document.getElementById('inboxFolderCommercialBtn');
+    const sentBtn = document.getElementById('inboxFolderSentBtn');
     const keepBtn = document.getElementById('btnKeepCommercial');
     const deleteCommercialBtn = document.getElementById('btnDeleteCommercial');
     if (inboxBtn) inboxBtn.classList.toggle('active', inboxFolder === 'inbox');
     if (commercialBtn) commercialBtn.classList.toggle('active', isCommercial);
+    if (sentBtn) sentBtn.classList.toggle('active', inboxFolder === 'sent');
     if (keepBtn) keepBtn.classList.toggle('is-hidden', !isCommercial);
     if (deleteCommercialBtn) deleteCommercialBtn.classList.toggle('is-hidden', !isCommercial);
 }
@@ -4032,6 +4035,7 @@ function getFilteredInbox() {
             (m.subject || '').toLowerCase().includes(query) ||
             (m.from_name || '').toLowerCase().includes(query) ||
             (m.from_email || '').toLowerCase().includes(query) ||
+            (m.to || '').toLowerCase().includes(query) ||
             (m.body || '').toLowerCase().includes(query)
         );
     }
@@ -4044,10 +4048,13 @@ function renderInboxList() {
     if (!container) return;
 
     const mails = getFilteredInbox();
+    const emptyLabel = inboxFolder === 'sent'
+        ? 'Aucun mail envoyé enregistré pour le moment.'
+        : 'Boîte de réception vide. Clique sur Relever pour récupérer le courrier.';
 
     if (!mails.length) {
         container.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--text-muted)">
-            ${inboxMails.length ? 'Aucun résultat' : 'Boîte de réception vide. Clique sur Relever pour récupérer le courrier.'}
+            ${inboxMails.length ? 'Aucun résultat' : emptyLabel}
         </div>`;
         return;
     }
