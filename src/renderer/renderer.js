@@ -1492,8 +1492,10 @@ function getProcessableInboxIds() {
     return inboxMails
         .filter(m => !m.deleted && m.folder !== 'sent' && !m.processed && (m.mailbox || 'inbox') !== 'commercial')
         .sort((a, b) => {
-            const da = a.date ? new Date(a.date).getTime() : 0;
-            const db = b.date ? new Date(b.date).getTime() : 0;
+            const daTs = Number(a?.date_ts || 0);
+            const dbTs = Number(b?.date_ts || 0);
+            const da = Number.isFinite(daTs) && daTs > 0 ? daTs : (a.date ? new Date(a.date).getTime() : 0);
+            const db = Number.isFinite(dbTs) && dbTs > 0 ? dbTs : (b.date ? new Date(b.date).getTime() : 0);
             return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
         })
         .map(m => m.id);

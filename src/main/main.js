@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, ipcMain, dialog, Menu, globalShortcut, shell, protocol, safeStorage, nativeImage } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, dialog, Menu, globalShortcut, shell, protocol, safeStorage, nativeImage, session } = require('electron');
 const { spawn, spawnSync, execSync } = require('child_process');
 const path = require('path');
 const net = require('net');
@@ -27,7 +27,73 @@ let browserVisible = false;
 let activeBrowserTabId = null;
 let browserBounds = { x: 0, y: 0, width: 0, height: 0 };
 const browserViews = new Map();
+const adBlockConfiguredPartitions = new Set();
 const DRAG_TEMP_DIR = path.join(os.tmpdir(), 'neurail-drag');
+
+const AD_BLOCKED_HOST_SUFFIXES = [
+  'doubleclick.net',
+  'googlesyndication.com',
+  'googleadservices.com',
+  'adnxs.com',
+  'taboola.com',
+  'outbrain.com',
+  'criteo.com',
+  'adsrvr.org',
+  'scorecardresearch.com',
+  'zedo.com',
+  'pubmatic.com',
+  'rubiconproject.com',
+  'openx.net',
+  'smartadserver.com',
+  'advertising.com',
+  'amazon-adsystem.com',
+  'facebook.net',
+  'moatads.com',
+];
+
+const AD_BLOCKED_URL_TOKENS = [
+  '/ads?',
+  '/ads/',
+  'adservice',
+  'googlesyndication',
+  'doubleclick',
+  'pagead/',
+  'prebid',
+  '/banner',
+];
+
+function shouldBlockAdRequest(details) {
+  if (!details || details.resourceType === 'mainFrame') return false;
+
+  try {
+    const requestUrl = String(details.url || '').toLowerCase();
+    const host = (new URL(requestUrl).hostname || '').toLowerCase();
+    if (!host) return false;
+
+    if (AD_BLOCKED_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+      return true;
+    }
+
+    return AD_BLOCKED_URL_TOKENS.some((token) => requestUrl.includes(token));
+  } catch {
+    return false;
+  }
+}
+
+function enableAdBlockForPartition(partition) {
+  const key = String(partition || '').trim();
+  if (!key || adBlockConfiguredPartitions.has(key)) return;
+
+  try {
+    const sess = session.fromPartition(key);
+    sess.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+      callback({ cancel: shouldBlockAdRequest(details) });
+    });
+    adBlockConfiguredPartitions.add(key);
+  } catch (e) {
+    console.warn('[adblock] failed to initialize for partition', key, e?.message || e);
+  }
+}
 
 function sanitizeFilenameForTemp(name) {
   const base = String(name || 'fichier').replace(/[\\/:*?"<>|]/g, '_').trim() || 'fichier';
@@ -395,6 +461,7 @@ function ensureBrowserViewTab(tabId, initialUrl, partition) {
   if (browserViews.has(tabId)) return browserViews.get(tabId);
 
   const tabPartition = String(partition || '').trim() || browserSessionPartitionForUrl(initialUrl);
+  enableAdBlockForPartition(tabPartition);
   const view = new BrowserView({
     webPreferences: {
       nodeIntegration: false,

@@ -68,6 +68,11 @@ def fetch_pop3(
         seen[account_key] = []
 
     inbox = load_inbox_index()
+    existing_mail_ids = {
+        str(m.get("id", "") or "").strip()
+        for m in inbox
+        if str(m.get("id", "") or "").strip()
+    }
     new_count = 0
     errors = []
 
@@ -104,6 +109,10 @@ def fetch_pop3(
                 raw_bytes = b"\r\n".join(lines)
 
                 mail_id = compute_mail_id(raw_bytes)
+                if mail_id in existing_mail_ids:
+                    if uid not in seen[account_key]:
+                        seen[account_key].append(uid)
+                    continue
 
                 meta = parse_email_metadata(raw_bytes, account_email)
                 eml_filename = _save_eml_bytes_atomic(
@@ -122,6 +131,7 @@ def fetch_pop3(
                 meta["storage_dir"] = mails_dir
 
                 inbox.append(meta)
+                existing_mail_ids.add(mail_id)
                 seen[account_key].append(uid)
                 new_count += 1
 
@@ -169,6 +179,11 @@ def fetch_imap(
         seen[account_key] = []
 
     inbox = load_inbox_index()
+    existing_mail_ids = {
+        str(m.get("id", "") or "").strip()
+        for m in inbox
+        if str(m.get("id", "") or "").strip()
+    }
     new_count = 0
     errors = []
 
@@ -215,6 +230,10 @@ def fetch_imap(
                 if not isinstance(raw_bytes, (bytes, bytearray)):
                     continue
                 mail_id = compute_mail_id(raw_bytes)
+                if mail_id in existing_mail_ids:
+                    if uid not in seen[account_key]:
+                        seen[account_key].append(uid)
+                    continue
 
                 meta = parse_email_metadata(raw_bytes, account_email)
                 eml_filename = _save_eml_bytes_atomic(
@@ -234,6 +253,7 @@ def fetch_imap(
                 meta["storage_dir"] = mails_dir
 
                 inbox.append(meta)
+                existing_mail_ids.add(mail_id)
                 seen[account_key].append(uid)
                 new_count += 1
 

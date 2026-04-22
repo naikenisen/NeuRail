@@ -683,6 +683,13 @@ ONLYOFFICE_CANDIDATE_CMDS = [
 _MAILBOX_REFRESH_LOCK = threading.Lock()
 _MAILBOX_REFRESH_RUNNING = False
 _MAILBOX_REFRESH_LAST_START = 0.0
+_MAIL_FETCH_LOCK = threading.Lock()
+
+_BG_MAIL_MAINTENANCE_STOP = threading.Event()
+_BG_MAIL_MAINTENANCE_THREAD = None
+
+BG_CLASSIFY_INTERVAL_SECONDS = max(45, int(os.environ.get("NEURAIL_BG_CLASSIFY_INTERVAL", "180") or "180"))
+BG_FETCH_INTERVAL_SECONDS = max(120, int(os.environ.get("NEURAIL_BG_FETCH_INTERVAL", "600") or "600"))
 
 _DOWNLOADS_CACHE_LOCK = threading.Lock()
 _DOWNLOADS_CACHE_FILES = []
@@ -1090,27 +1097,72 @@ def fetch_imap(account):
 
 
 # Récupère les emails de tous les comptes configurés (POP3 ou IMAP)
-def fetch_all_accounts():
+def fetch_all_accounts(wait_for_lock: bool = True):
+    acquired = _MAIL_FETCH_LOCK.acquire(blocking=bool(wait_for_lock))
+    if not acquired:
+        return 0, []
+
     accounts = load_accounts()
     total_new = 0
     all_errors = []
 
-    for acc in accounts:
-        if not acc.get("enabled", True):
-            continue
-        try:
-            protocol = acc.get("protocol", "pop3").lower()
-            n, errs = fetch_imap(acc) if protocol == "imap" else fetch_pop3(acc)
-            total_new += n
-            all_errors.extend(errs)
-        except Exception as e:
-            all_errors.append(f"{acc.get('email', '?')}: {e}")
+    try:
+        for acc in accounts:
+            if not acc.get("enabled", True):
+                continue
+            try:
+                protocol = acc.get("protocol", "pop3").lower()
+                n, errs = fetch_imap(acc) if protocol == "imap" else fetch_pop3(acc)
+                total_new += n
+                all_errors.extend(errs)
+            except Exception as e:
+                all_errors.append(f"{acc.get('email', '?')}: {e}")
 
-    local_new, local_errors, _ = refresh_and_classify_local_mailboxes()
-    total_new += local_new
-    all_errors.extend(local_errors)
+        local_new, local_errors, _ = refresh_and_classify_local_mailboxes()
+        total_new += local_new
+        all_errors.extend(local_errors)
+    finally:
+        _MAIL_FETCH_LOCK.release()
 
     return total_new, all_errors
+
+
+def _background_mail_maintenance_loop():
+    next_classify_at = 0.0
+    next_fetch_at = 0.0
+
+    while not _BG_MAIL_MAINTENANCE_STOP.is_set():
+        now = time.time()
+
+        if now >= next_fetch_at:
+            try:
+                fetch_all_accounts(wait_for_lock=False)
+            except Exception:
+                pass
+            next_fetch_at = now + float(BG_FETCH_INTERVAL_SECONDS)
+            next_classify_at = max(next_classify_at, now + float(BG_CLASSIFY_INTERVAL_SECONDS))
+
+        if now >= next_classify_at:
+            try:
+                refresh_and_classify_local_mailboxes()
+            except Exception:
+                pass
+            next_classify_at = now + float(BG_CLASSIFY_INTERVAL_SECONDS)
+
+        _BG_MAIL_MAINTENANCE_STOP.wait(8.0)
+
+
+def _start_background_mail_maintenance_once():
+    global _BG_MAIL_MAINTENANCE_THREAD
+    if _BG_MAIL_MAINTENANCE_THREAD and _BG_MAIL_MAINTENANCE_THREAD.is_alive():
+        return
+    _BG_MAIL_MAINTENANCE_STOP.clear()
+    _BG_MAIL_MAINTENANCE_THREAD = threading.Thread(
+        target=_background_mail_maintenance_loop,
+        daemon=True,
+        name="neurail-mail-maintenance",
+    )
+    _BG_MAIL_MAINTENANCE_THREAD.start()
 
 
 # Envoie un email via SMTP pour un compte donné
@@ -1827,6 +1879,7 @@ if __name__ == "__main__":
     try:
         socketserver.TCPServer.allow_reuse_address = True
         server = http.server.ThreadingHTTPServer(("", PORT), Handler)
+        _start_background_mail_maintenance_once()
         print(f"✅ Server bound to port {PORT}, serving…", flush=True)
         server.serve_forever()
     except SystemExit as se:
@@ -1840,3 +1893,5 @@ if __name__ == "__main__":
         print(f"❌ Server crashed: {type(exc).__name__}: {exc}", flush=True)
         traceback.print_exc(file=sys.stdout)
         sys.exit(1)
+    finally:
+        _BG_MAIL_MAINTENANCE_STOP.set()
