@@ -2012,6 +2012,11 @@
             flex-direction: column;
             gap: 0.6rem;
         }
+        .downloads-columns-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.6rem;
+        }
         .downloads-form label {
             font-size: 0.78rem;
             color: var(--text-muted);
@@ -2071,6 +2076,63 @@
             border-color: #ef4444;
             color: #ef4444;
             background: rgba(239,68,68,0.08);
+        }
+        .inbox-item.is-deposited {
+            opacity: 0.48;
+            filter: grayscale(0.2);
+        }
+        .downloads-preview-panel {
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-sm);
+            background: var(--bg-surface);
+            min-height: 210px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .downloads-preview-panel h4 {
+            margin: 0;
+            padding: 0.55rem 0.75rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--card-border);
+        }
+        .downloads-native-preview {
+            flex: 1;
+            min-height: 160px;
+            padding: 0.65rem;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            overflow: auto;
+        }
+        .downloads-native-frame {
+            width: 100%;
+            height: min(56vh, 620px);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            background: #fff;
+        }
+        .downloads-txt-preview {
+            margin: 0;
+            padding: 0.75rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text);
+            background: var(--bg-secondary);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+        }
+        .downloads-preview-note,
+        .downloads-preview-loading,
+        .downloads-preview-error {
+            padding: 0.75rem;
+            font-size: 0.82rem;
+        }
+        .downloads-preview-error {
+            color: #ef4444;
         }
         /* ─── Inbox: unprocessed red dot ───────────── */
         .inbox-item-unprocessed-dot {

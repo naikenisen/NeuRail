@@ -430,15 +430,8 @@ _MAIL_DI_COMMON = dict(
     mails_dir=MAILS_DIR,
 )
 
-
-_COMMERCIAL_SUBJECT_HINTS = [
-    "promo", "promotion", "offre", "offres", "soldes", "black friday", "cyber monday",
-    "newsletter", "marketing", "reduction", "-10%", "-20%", "code promo", "bon plan",
-    "deal", "deals", "vente privee", "destockage", "nouveautes", "collection", "catalogue",
-]
-_COMMERCIAL_SENDER_HINTS = [
-    "newsletter", "no-reply", "noreply", "marketing", "promo", "offers", "offres",
-]
+COMMERCIAL_SENDERS_FILE = os.path.join(APP_DATA_DIR, "commercial_senders.json")
+RSPAMD_SPAM_ACTIONS = {"add header", "rewrite subject", "soft reject", "reject", "greylist"}
 
 
 def _mailbox_of(mail):
@@ -450,39 +443,65 @@ def _mailbox_of(mail):
     return "inbox"
 
 
-def _looks_commercial(mail):
-    if mail.get("folder") == "sent":
+def _load_commercial_senders() -> set[str]:
+    data = read_json_with_backup(COMMERCIAL_SENDERS_FILE, [])
+    if not isinstance(data, list):
+        return set()
+    return {
+        str(item or "").strip().lower()
+        for item in data
+        if str(item or "").strip()
+    }
+
+
+def _save_commercial_senders(senders: set[str]):
+    atomic_write_json(COMMERCIAL_SENDERS_FILE, sorted(senders))
+
+
+def _rspamd_marks_suspect(eml_path: str) -> bool:
+    if not eml_path or not os.path.isfile(eml_path):
         return False
 
-    if mail.get("has_list_unsubscribe"):
-        return True
+    rspamc_cmd = os.environ.get("RSPAMC_CMD", "rspamc").strip() or "rspamc"
+    if not shutil.which(rspamc_cmd):
+        return False
 
-    subject = str(mail.get("subject", "") or "").lower()
-    sender = str(mail.get("from_email", "") or "").lower()
-    sender_name = str(mail.get("from_name", "") or "").lower()
+    try:
+        proc = subprocess.run(
+            [rspamc_cmd, "symbols", "-i", eml_path],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except Exception:
+        return False
 
-    score = 0
-    for hint in _COMMERCIAL_SUBJECT_HINTS:
-        if hint in subject:
-            score += 1
-    for hint in _COMMERCIAL_SENDER_HINTS:
-        if hint in sender or hint in sender_name:
-            score += 1
+    output = "\n".join([
+        proc.stdout or "",
+        proc.stderr or "",
+    ])
+    if not output.strip():
+        return False
 
-    return score >= 2
+    action_match = re.search(r"Action:\s*([^;\n]+)", output, flags=re.IGNORECASE)
+    if action_match:
+        action = action_match.group(1).strip().lower()
+        if action in RSPAMD_SPAM_ACTIONS:
+            return True
+        if action in ("no action", "ham"):
+            return False
 
+    score_match = re.search(r"Score:\s*(-?\d+(?:\.\d+)?)\s*/", output, flags=re.IGNORECASE)
+    if score_match:
+        try:
+            score = float(score_match.group(1))
+            if score >= 6.0:
+                return True
+        except Exception:
+            pass
 
-def _known_commercial_senders(inbox: list[dict]) -> set[str]:
-    senders = set()
-    for mail in inbox:
-        if mail.get("deleted") or mail.get("folder") == "sent":
-            continue
-        if _mailbox_of(mail) != "commercial":
-            continue
-        sender = str(mail.get("from_email", "") or "").strip().lower()
-        if sender:
-            senders.add(sender)
-    return senders
+    lower_output = output.lower()
+    return "is spam" in lower_output or "spam: true" in lower_output
 
 
 def _ensure_unique_filename_in_dir(filename: str, target_dir: str) -> str:
@@ -521,18 +540,19 @@ def _move_mail_to_storage(mail: dict, target_dir: str, target_mailbox: str, proc
 
 def apply_commercial_filter(inbox: list[dict]) -> int:
     changed = 0
-    known_commercial = _known_commercial_senders(inbox)
+    sender_rules = _load_commercial_senders()
     for mail in inbox:
         if mail.get("deleted") or mail.get("folder") == "sent":
             continue
 
         sender = str(mail.get("from_email", "") or "").strip().lower()
-        sender_marked_commercial = bool(sender and sender in known_commercial)
+        sender_marked_commercial = bool(sender and sender in sender_rules)
+        rspamd_suspect = _rspamd_marks_suspect(resolve_eml_path(mail))
 
         if str(mail.get("commercial_override", "") or "").lower() == "keep":
             target_mailbox = "inbox"
         else:
-            target_mailbox = "commercial" if (sender_marked_commercial or _looks_commercial(mail)) else "inbox"
+            target_mailbox = "commercial" if (sender_marked_commercial or rspamd_suspect) else "inbox"
         current_mailbox = _mailbox_of(mail)
 
         if target_mailbox == "commercial":
@@ -540,12 +560,8 @@ def apply_commercial_filter(inbox: list[dict]) -> int:
                 moved = _move_mail_to_storage(mail, COMMERCIAL_DIR, "commercial", processed_override=True)
                 if moved:
                     changed += 1
-                    if sender:
-                        known_commercial.add(sender)
             else:
                 mail["processed"] = True
-                if sender:
-                    known_commercial.add(sender)
         else:
             if current_mailbox == "commercial":
                 moved = _move_mail_to_storage(mail, MAILS_DIR, "inbox", processed_override=False)
@@ -655,6 +671,13 @@ def delete_mails_batch(ids, delete_on_server=True):
 
 
 DOWNLOAD_RELEVANT_EXTS = {".docx", ".xlsx", ".csv", ".pdf", ".odt", ".txt", ".pptx"}
+DOWNLOADS_METADATA_FILE = "data.csv"
+DOWNLOADS_METADATA_FIELDS = ["filename", "name1", "name2", "description", "deposited"]
+ONLYOFFICE_CANDIDATE_CMDS = [
+    os.environ.get("ONLYOFFICE_CMD", "").strip(),
+    "onlyoffice-desktopeditors",
+    "desktopeditors",
+]
 
 
 def _is_subpath(path_value: str, root_dir: str) -> bool:
@@ -678,13 +701,146 @@ def _safe_download_path(path_value: str) -> str:
     return abs_path
 
 
+def _downloads_metadata_csv_path() -> str:
+    return os.path.join(DOWNLOADS, DOWNLOADS_METADATA_FILE)
+
+
+def _read_downloads_metadata() -> dict[str, dict]:
+    csv_path = _downloads_metadata_csv_path()
+    if not os.path.isfile(csv_path):
+        return {}
+
+    out = {}
+    try:
+        with open(csv_path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                filename = str(row.get("filename", "") or "").strip()
+                if not filename:
+                    continue
+                out[filename] = {
+                    "filename": filename,
+                    "name1": str(row.get("name1", "") or "").strip(),
+                    "name2": str(row.get("name2", "") or "").strip(),
+                    "description": str(row.get("description", "") or "").strip(),
+                    "deposited": str(row.get("deposited", "") or "").strip().lower() in ("1", "true", "yes", "oui"),
+                }
+    except Exception:
+        return {}
+    return out
+
+
+def _write_downloads_metadata(entries: dict[str, dict]):
+    os.makedirs(DOWNLOADS, exist_ok=True)
+    csv_path = _downloads_metadata_csv_path()
+    rows = []
+    for filename in sorted(entries.keys()):
+        row = entries[filename] or {}
+        rows.append({
+            "filename": filename,
+            "name1": str(row.get("name1", "") or "").strip(),
+            "name2": str(row.get("name2", "") or "").strip(),
+            "description": str(row.get("description", "") or "").strip(),
+            "deposited": "1" if bool(row.get("deposited", False)) else "0",
+        })
+
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=DOWNLOADS_METADATA_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _sanitize_filename_token(value: str) -> str:
+    s = str(value or "").strip()
+    s = re.sub(r"\s+", "_", s)
+    s = re.sub(r"[^A-Za-z0-9_\-]", "", s)
+    return s.strip("_-")
+
+
+def _build_renamed_download_path(file_path: str, name1: str, name2: str) -> str:
+    directory = os.path.dirname(file_path)
+    ext = os.path.splitext(file_path)[1].lower()
+    base = f"{_sanitize_filename_token(name1)}_{_sanitize_filename_token(name2)}".strip("_")
+    if not base:
+        raise ValueError("Nom 1 et Nom 2 invalides")
+
+    candidate = f"{base}{ext}"
+    target_path = os.path.join(directory, candidate)
+    if os.path.abspath(target_path) == os.path.abspath(file_path):
+        return target_path
+
+    stem, ext_only = os.path.splitext(candidate)
+    i = 1
+    while os.path.exists(target_path):
+        candidate = f"{stem}_{i}{ext_only}"
+        target_path = os.path.join(directory, candidate)
+        i += 1
+    return target_path
+
+
+def update_download_metadata(path_value: str, name1: str, name2: str, description: str) -> dict:
+    source_path = _safe_download_path(path_value)
+    source_name = os.path.basename(source_path)
+
+    clean_name1 = str(name1 or "").strip()
+    clean_name2 = str(name2 or "").strip()
+    clean_desc = str(description or "").strip()
+
+    metadata = _read_downloads_metadata()
+    entry = dict(metadata.get(source_name) or {})
+    entry["name1"] = clean_name1
+    entry["name2"] = clean_name2
+    entry["description"] = clean_desc
+    entry["deposited"] = bool(entry.get("deposited", False))
+
+    final_path = source_path
+    final_name = source_name
+
+    if clean_name1 and clean_name2:
+        target_path = _build_renamed_download_path(source_path, clean_name1, clean_name2)
+        if os.path.abspath(target_path) != os.path.abspath(source_path):
+            os.replace(source_path, target_path)
+            final_path = target_path
+            final_name = os.path.basename(target_path)
+
+    if final_name != source_name and source_name in metadata:
+        metadata.pop(source_name, None)
+
+    metadata[final_name] = {
+        "filename": final_name,
+        "name1": clean_name1,
+        "name2": clean_name2,
+        "description": clean_desc,
+        "deposited": bool(entry.get("deposited", False)),
+    }
+    _write_downloads_metadata(metadata)
+
+    st = os.stat(final_path)
+    return {
+        "path": final_path,
+        "name": final_name,
+        "ext": os.path.splitext(final_name)[1].lower(),
+        "size": int(st.st_size),
+        "mtime": int(st.st_mtime * 1000),
+        "date": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+        "name1": clean_name1,
+        "name2": clean_name2,
+        "description": clean_desc,
+        "deposited": bool(entry.get("deposited", False)),
+    }
+
+
 def list_download_candidates():
     files = []
     if not os.path.isdir(DOWNLOADS):
         return files
 
+    metadata = _read_downloads_metadata()
+
     for current_root, _, filenames in os.walk(DOWNLOADS):
         for name in filenames:
+            if name == DOWNLOADS_METADATA_FILE:
+                continue
             ext = os.path.splitext(name)[1].lower()
             if ext not in DOWNLOAD_RELEVANT_EXTS:
                 continue
@@ -693,6 +849,7 @@ def list_download_candidates():
                 continue
             try:
                 st = os.stat(full_path)
+                meta = metadata.get(name, {})
                 files.append({
                     "id": hashlib.sha1(full_path.encode("utf-8", errors="ignore")).hexdigest()[:16],
                     "path": full_path,
@@ -701,6 +858,10 @@ def list_download_candidates():
                     "size": int(st.st_size),
                     "mtime": int(st.st_mtime * 1000),
                     "date": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                    "name1": str(meta.get("name1", "") or "").strip(),
+                    "name2": str(meta.get("name2", "") or "").strip(),
+                    "description": str(meta.get("description", "") or "").strip(),
+                    "deposited": bool(meta.get("deposited", False)),
                 })
             except Exception:
                 continue
@@ -760,6 +921,30 @@ def move_file_to_trash(path_value: str):
         i += 1
     shutil.move(file_path, os.path.join(trash_dir, candidate))
     return True
+
+
+def open_file_in_onlyoffice(path_value: str) -> str:
+    file_path = _safe_download_path(path_value)
+
+    for cmd in ONLYOFFICE_CANDIDATE_CMDS:
+        if not cmd:
+            continue
+        if not shutil.which(cmd):
+            continue
+        subprocess.Popen([cmd, file_path], start_new_session=True)
+        return cmd
+
+    raise RuntimeError("OnlyOffice introuvable (commande: onlyoffice-desktopeditors)")
+
+
+def get_download_candidates_for_drop() -> list[dict]:
+    files = list_download_candidates()
+    return [
+        f for f in files
+        if str(f.get("name1", "")).strip()
+        and str(f.get("name2", "")).strip()
+        and str(f.get("description", "")).strip()
+    ]
 
 
 # Récupère les emails via POP3 pour un compte donné
@@ -896,6 +1081,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "count": len(files),
                     "files": files,
                 })
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+        if self.path.startswith("/api/downloads/file?"):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                path_value = qs.get("path", [""])[0]
+                file_path = _safe_download_path(path_value)
+                content_type, _ = mimetypes.guess_type(file_path)
+                content_type = content_type or "application/octet-stream"
+
+                with open(file_path, "rb") as f:
+                    payload = f.read()
+
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Content-Disposition", f'inline; filename="{os.path.basename(file_path)}"')
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            except ValueError as ve:
+                return self._json({"error": str(ve)}, 400)
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
         if self.path == "/api/inbox":
@@ -1219,6 +1426,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 
+        if self.path == "/api/mail/mark-commercial":
+            try:
+                mail_id = str(data.get("id", "") or "").strip()
+                if not mail_id:
+                    return self._json({"error": "id manquant"}, 400)
+
+                inbox = load_inbox_index()
+                mail = next((m for m in inbox if m.get("id") == mail_id), None)
+                if not mail:
+                    return self._json({"error": "Mail introuvable"}, 404)
+                if mail.get("folder") == "sent" or mail.get("deleted"):
+                    return self._json({"error": "Mail non classable"}, 400)
+
+                sender = str(mail.get("from_email", "") or "").strip().lower()
+                if not sender:
+                    return self._json({"error": "Expediteur introuvable"}, 400)
+
+                if not _move_mail_to_storage(mail, COMMERCIAL_DIR, "commercial", processed_override=True):
+                    return self._json({"error": "Impossible de deplacer le mail"}, 500)
+
+                mail["commercial_override"] = ""
+                sender_rules = _load_commercial_senders()
+                sender_rules.add(sender)
+                _save_commercial_senders(sender_rules)
+                save_inbox_index(inbox)
+                return self._json({"ok": True, "sender": sender})
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
         if self.path == "/api/commercial/delete-all":
             try:
                 inbox = load_inbox_index()
@@ -1259,6 +1495,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json({"ok": True})
             except ValueError as ve:
                 return self._json({"error": str(ve)}, 400)
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/downloads/open-onlyoffice":
+            try:
+                path_value = data.get("path", "")
+                cmd = open_file_in_onlyoffice(path_value)
+                return self._json({"ok": True, "cmd": cmd})
+            except ValueError as ve:
+                return self._json({"error": str(ve)}, 400)
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/downloads/update-metadata":
+            try:
+                path_value = data.get("path", "")
+                name1 = data.get("name1", "")
+                name2 = data.get("name2", "")
+                description = data.get("description", "")
+                file_data = update_download_metadata(path_value, name1, name2, description)
+                return self._json({"ok": True, "file": file_data})
+            except ValueError as ve:
+                return self._json({"error": str(ve)}, 400)
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+
+        if self.path == "/api/downloads/drop-candidates":
+            try:
+                files = get_download_candidates_for_drop()
+                return self._json({
+                    "ok": True,
+                    "root": DOWNLOADS,
+                    "csv_path": _downloads_metadata_csv_path(),
+                    "count": len(files),
+                    "files": files,
+                })
             except Exception as e:
                 return self._json({"error": str(e)}, 500)
 

@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyTempFileTo: (payload) => ipcRenderer.invoke('drag:copyFileToDestination', payload),
   // Lance la fenêtre GTK de glisser-déposer natif (support XDG portal)
   launchDragHelper: (payload) => ipcRenderer.invoke('drag:launchHelper', payload),
+  // Lance la fenêtre GTK de dépôt en lot pour les téléchargements
+  launchDownloadsDragHelper: (payload) => ipcRenderer.invoke('drag:launchDownloadsHelper', payload),
 
   // Lit un fichier relatif au répertoire de l'application
   readFile: (relativePath) => ipcRenderer.invoke('fs:readFile', relativePath),

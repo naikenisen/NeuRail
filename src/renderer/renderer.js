@@ -78,7 +78,10 @@ function switchTab(tab) {
     if (tab === 'mail') renderMailTab();
     if (tab === 'inbox') loadInbox();
     if (tab === 'mail-process') refreshMailProcessSummary();
-    if (tab === 'downloads') loadDownloadsManager();
+    if (tab === 'downloads') {
+        ensureDownloadsAutoRefresh();
+        loadDownloadsManager();
+    }
     if (tab === 'annuaire') loadAnnuaire();
     updateSiteTabViewVisibility();
 }
@@ -1469,6 +1472,7 @@ function getActiveSignatureHtml() {
    Mail Processing Wizard
    ═══════════════════════════════════════════════════════ */
 const MP_RELEVANT_EXTS = ['.odt', '.docx', '.pdf', '.xlsx', '.csv', '.pptx'];
+const MP_PROGRESS_STORAGE_KEY = 'mail-process-progress-v1';
 
 let mpQueue = [];
 let mpIndex = 0;
@@ -1480,6 +1484,73 @@ let mpSkipAttachments = false;
 let mpPreparedAttachment = null;
 let mpPendingDeleteCurrentMail = false;
 let mpDeleteInFlight = null;
+
+function getProcessableInboxIds() {
+    return inboxMails
+        .filter(m => !m.deleted && m.folder !== 'sent' && !m.processed && (m.mailbox || 'inbox') !== 'commercial')
+        .sort((a, b) => {
+            const da = a.date ? new Date(a.date).getTime() : 0;
+            const db = b.date ? new Date(b.date).getTime() : 0;
+            return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
+        })
+        .map(m => m.id);
+}
+
+function saveMailProcessProgress() {
+    try {
+        const payload = {
+            queue: Array.isArray(mpQueue) ? mpQueue : [],
+            index: Number(mpIndex) || 0,
+            skipStep1: !!mpSkipStep1,
+            skipAttachments: !!mpSkipAttachments,
+        };
+        localStorage.setItem(MP_PROGRESS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {}
+}
+
+function clearMailProcessProgress() {
+    try {
+        localStorage.removeItem(MP_PROGRESS_STORAGE_KEY);
+    } catch {}
+}
+
+function loadMailProcessProgress() {
+    try {
+        const raw = localStorage.getItem(MP_PROGRESS_STORAGE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!Array.isArray(data?.queue)) return null;
+        const idx = Math.max(0, Number(data?.index) || 0);
+        return {
+            queue: data.queue.filter(Boolean),
+            index: idx,
+            skipStep1: !!data.skipStep1,
+            skipAttachments: !!data.skipAttachments,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function getResumeMailProcessState() {
+    const saved = loadMailProcessProgress();
+    if (!saved || !saved.queue.length) return null;
+
+    const pendingSet = new Set(getProcessableInboxIds());
+    const filteredQueue = saved.queue.filter((id) => pendingSet.has(id));
+    if (!filteredQueue.length) {
+        clearMailProcessProgress();
+        return null;
+    }
+
+    const index = Math.min(Math.max(0, saved.index), filteredQueue.length - 1);
+    return {
+        queue: filteredQueue,
+        index,
+        skipStep1: saved.skipStep1,
+        skipAttachments: saved.skipAttachments,
+    };
+}
 
 function mpShowStep(stepId) {
     document.querySelectorAll('#mailProcessContent .mp-step').forEach(el => el.classList.add('is-hidden'));
@@ -1587,13 +1658,14 @@ function mpRenderMailPreview(mail) {
     previewEl.innerHTML = `<div class="mp-preview-text-fallback">${esc(bodyText)}</div>`;
 }
 
-function startMailProcess(mailIds, skipDeleteStep, skipAttachmentStep = false) {
+function startMailProcess(mailIds, skipDeleteStep, skipAttachmentStep = false, startIndex = 0) {
     mpQueue = mailIds;
-    mpIndex = 0;
+    mpIndex = Math.max(0, Number(startIndex) || 0);
     mpSkipStep1 = !!skipDeleteStep;
     mpSkipAttachments = !!skipAttachmentStep;
     mpPendingDeleteCurrentMail = false;
     mpDeleteInFlight = null;
+    saveMailProcessProgress();
     const modal = document.getElementById('mailProcessModal');
     modal.classList.add('show');
     mpProcessCurrent();
@@ -1642,13 +1714,19 @@ async function closeMailProcess(completed = false) {
     document.getElementById('mailProcessModal').classList.remove('show');
     document.getElementById('mpReplyModal').style.display = 'none';
     mpReplyMode = null;
-    mpQueue = [];
-    mpIndex = 0;
+    if (!aborted) {
+        clearMailProcessProgress();
+        mpQueue = [];
+        mpIndex = 0;
+    } else {
+        saveMailProcessProgress();
+    }
     mpSkipAttachments = false;
     mpCurrentMail = null;
     mpPendingDeleteCurrentMail = false;
     mpDeleteInFlight = null;
     mpClearPreparedAttachment();
+    refreshMailProcessSummary();
 }
 
 function mpGetRelevantAttachments(attachments) {
@@ -1851,7 +1929,9 @@ function mpBlobToBase64(blob) {
 async function mpProcessCurrent() {
     if (mpIndex >= mpQueue.length) {
         await loadInbox();
+        clearMailProcessProgress();
         mpShowStep('mpStepDone');
+        refreshMailProcessSummary();
         return;
     }
     const mailId = mpQueue[mpIndex];
@@ -1883,6 +1963,8 @@ async function mpNextMail() {
         await markMailProcessed(mpCurrentMail.id);
     }
     mpIndex++;
+    saveMailProcessProgress();
+    refreshMailProcessSummary();
     mpProcessCurrent();
 }
 
@@ -1902,6 +1984,31 @@ async function mpDeleteFromServer() {
     await mpDeleteCurrentMailOnServerAndLocally();
     mpPendingDeleteCurrentMail = false;
     mpNextMail();
+}
+
+async function mpClassifyCommercial() {
+    if (!mpCurrentMail || !mpCurrentMail.id) return;
+
+    showLoading('Classement dans Commercial...');
+    try {
+        const r = await fetch('/api/mail/mark-commercial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: mpCurrentMail.id }),
+        });
+        const result = await r.json();
+        if (!r.ok || !result.ok) {
+            showToast('Erreur : ' + (result.error || 'classement impossible'), 'error', 3800);
+            return;
+        }
+
+        showToast('Mail classé en commercial. Les prochains mails de cet expéditeur seront aussi classés.', 'success', 3200);
+        mpNextMail();
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 3800);
+    } finally {
+        hideLoading();
+    }
 }
 
 function mpKeepMail() {
@@ -3014,6 +3121,10 @@ let downloadsFiles = [];
 let selectedDownloadPath = null;
 let downloadsRoot = '/home/naiken/Téléchargements';
 let dlPreparedFile = null;
+let downloadsPreviewToken = 0;
+let downloadsAutoRefreshTimer = null;
+const DOWNLOAD_NATIVE_PREVIEW_EXTS = new Set(['.pdf', '.txt']);
+const DOWNLOAD_ONLYOFFICE_EXTS = new Set(['.odt', '.xlsx', '.pptx', '.docx', '.csv']);
 
 function setCollapsibleHeaderField(elementId, value, maxLength = 110) {
     const el = document.getElementById(elementId);
@@ -3076,6 +3187,22 @@ function getSelectedDownloadFile() {
     return downloadsFiles.find(f => f.path === selectedDownloadPath) || null;
 }
 
+function getDownloadExt(file) {
+    return String(file?.ext || '').toLowerCase();
+}
+
+function canPreviewDownloadNatively(file) {
+    return DOWNLOAD_NATIVE_PREVIEW_EXTS.has(getDownloadExt(file));
+}
+
+function shouldOpenInOnlyOffice(file) {
+    return DOWNLOAD_ONLYOFFICE_EXTS.has(getDownloadExt(file));
+}
+
+function buildDownloadFileApiUrl(pathValue) {
+    return `/api/downloads/file?path=${encodeURIComponent(pathValue || '')}`;
+}
+
 function getFilteredDownloadsFiles() {
     const query = (document.getElementById('downloadsSearch')?.value || '').toLowerCase().trim();
     if (!query) return downloadsFiles;
@@ -3085,9 +3212,10 @@ function getFilteredDownloadsFiles() {
     );
 }
 
-async function loadDownloadsManager() {
+async function loadDownloadsManager(options = {}) {
+    const { silent = false } = options;
     const statusEl = document.getElementById('downloads-status');
-    if (statusEl) {
+    if (!silent && statusEl) {
         statusEl.style.display = 'block';
         statusEl.className = 'inbox-status loading';
         statusEl.textContent = 'Analyse du dossier Téléchargements...';
@@ -3097,7 +3225,7 @@ async function loadDownloadsManager() {
         const r = await fetch('/api/downloads/files');
         const result = await r.json();
         if (!r.ok || result.error) {
-            if (statusEl) {
+            if (!silent && statusEl) {
                 statusEl.className = 'inbox-status error';
                 statusEl.textContent = 'Erreur : ' + (result.error || 'Chargement impossible');
             }
@@ -3115,17 +3243,25 @@ async function loadDownloadsManager() {
         renderDownloadsList();
         renderDownloadsDetail();
 
-        if (statusEl) {
+        if (!silent && statusEl) {
             statusEl.className = 'inbox-status success';
             statusEl.textContent = `${downloadsFiles.length} fichier(s) à traiter dans ${downloadsRoot}`;
             setTimeout(() => { statusEl.style.display = 'none'; }, 3200);
         }
     } catch (e) {
-        if (statusEl) {
+        if (!silent && statusEl) {
             statusEl.className = 'inbox-status error';
             statusEl.textContent = 'Erreur : ' + e.message;
         }
     }
+}
+
+function ensureDownloadsAutoRefresh() {
+    if (downloadsAutoRefreshTimer) return;
+    downloadsAutoRefreshTimer = setInterval(() => {
+        if (currentTab !== 'downloads') return;
+        loadDownloadsManager({ silent: true });
+    }, 4000);
 }
 
 function renderDownloadsList() {
@@ -3141,14 +3277,15 @@ function renderDownloadsList() {
     container.innerHTML = list.map((f) => {
         const isSelected = selectedDownloadPath === f.path;
         const encoded = encodeURIComponent(f.path || '');
+        const isDeposited = !!f.deposited;
         return `
-            <div class="inbox-item ${isSelected ? 'selected' : ''}" onclick="selectDownloadFileEncoded('${encoded}')">
+            <div class="inbox-item ${isSelected ? 'selected' : ''} ${isDeposited ? 'is-deposited' : ''}" onclick="selectDownloadFileEncoded('${encoded}')">
                 <div class="inbox-item-content">
                     <div class="inbox-item-top">
                         <span class="inbox-item-from">${esc(f.name || 'fichier')}</span>
                         <span class="inbox-item-date">${esc(f.date || '')}</span>
                     </div>
-                    <div class="inbox-item-subject">${esc((f.ext || '').replace('.', '').toUpperCase())} • ${esc(formatDownloadSize(f.size || 0))}</div>
+                    <div class="inbox-item-subject">${esc((f.ext || '').replace('.', '').toUpperCase())} • ${esc(formatDownloadSize(f.size || 0))}${isDeposited ? ' • Déposé' : ''}</div>
                 </div>
             </div>`;
     }).join('');
@@ -3159,16 +3296,58 @@ function updateDownloadFilenamePreview() {
     const preview = document.getElementById('dlFilenamePreview');
     if (!file || !preview) return;
 
-    const shortName = String(document.getElementById('dlShortName')?.value || '').trim();
-    const date = new Date(Number(file.mtime || 0));
-    const yyyy = Number.isNaN(date.getTime()) ? 'AAAA' : String(date.getFullYear());
-    const mm = Number.isNaN(date.getTime()) ? 'MM' : String(date.getMonth() + 1).padStart(2, '0');
-    const dd = Number.isNaN(date.getTime()) ? 'JJ' : String(date.getDate()).padStart(2, '0');
+    const name1 = String(document.getElementById('dlName1')?.value || '').trim();
+    const name2 = String(document.getElementById('dlName2')?.value || '').trim();
     const ext = String(file.ext || '').toLowerCase();
-    if (shortName && /^[^\s_]+_[^\s_]+$/.test(shortName)) {
-        preview.textContent = `${yyyy}_${mm}_${dd}_${shortName}${ext}`;
+    if (name1 && name2) {
+        preview.textContent = `${name1}_${name2}${ext}`;
     } else {
-        preview.textContent = `${yyyy}_${mm}_${dd}_Mot1_Mot2${ext}`;
+        preview.textContent = `Nom1_Nom2${ext}`;
+    }
+}
+
+function getDownloadMetadataFormValues() {
+    return {
+        name1: String(document.getElementById('dlName1')?.value || '').trim(),
+        name2: String(document.getElementById('dlName2')?.value || '').trim(),
+        description: String(document.getElementById('dlDescription')?.value || '').trim(),
+    };
+}
+
+async function saveDownloadMetadataOnBlur() {
+    const file = getSelectedDownloadFile();
+    if (!file?.path) return;
+
+    const values = getDownloadMetadataFormValues();
+    showLoading('Enregistrement des métadonnées...');
+    try {
+        const r = await fetch('/api/downloads/update-metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                path: file.path,
+                name1: values.name1,
+                name2: values.name2,
+                description: values.description,
+            }),
+        });
+        const result = await r.json();
+        if (!r.ok || !result.ok) {
+            showToast('Erreur : ' + (result.error || 'enregistrement impossible'), 'error', 3200);
+            return;
+        }
+
+        const updatedPath = result.file?.path || file.path;
+        const renamed = updatedPath !== file.path;
+        selectedDownloadPath = updatedPath;
+        await loadDownloadsManager();
+        if (renamed) {
+            showToast('Fichier renommé automatiquement.', 'success', 2200);
+        }
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 3200);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -3214,6 +3393,7 @@ function renderDownloadsDetail() {
     }
 
     panel.className = 'downloads-detail-card';
+    const preferOnlyOffice = shouldOpenInOnlyOffice(file);
     panel.innerHTML = `
         <div class="downloads-file-title">${esc(file.name || 'fichier')}</div>
         <div class="downloads-meta">
@@ -3224,12 +3404,20 @@ function renderDownloadsDetail() {
         </div>
 
         <div class="downloads-form">
-            <label>Nom court (2 mots séparés par _)</label>
-            <input type="text" id="dlShortName" maxlength="40" placeholder="Ex: Facture_EDF" oninput="updateDownloadFilenamePreview()">
-            <div class="downloads-filename-preview">Fichier final: <strong id="dlFilenamePreview">AAAA_MM_JJ_Mot1_Mot2${esc(String(file.ext || '').toLowerCase())}</strong></div>
+            <div class="downloads-columns-grid">
+                <div>
+                    <label>Nom 1</label>
+                    <input type="text" id="dlName1" maxlength="60" value="${esc(file.name1 || '')}" placeholder="Ex: Facture" oninput="updateDownloadFilenamePreview()" onblur="saveDownloadMetadataOnBlur()">
+                </div>
+                <div>
+                    <label>Nom 2</label>
+                    <input type="text" id="dlName2" maxlength="60" value="${esc(file.name2 || '')}" placeholder="Ex: EDF" oninput="updateDownloadFilenamePreview()" onblur="saveDownloadMetadataOnBlur()">
+                </div>
+            </div>
+            <div class="downloads-filename-preview">Nom de fichier: <strong id="dlFilenamePreview">Nom1_Nom2${esc(String(file.ext || '').toLowerCase())}</strong></div>
 
             <label>Description longue (obligatoire)</label>
-            <textarea id="dlDescription" placeholder="Décrivez précisément le contenu du document..."></textarea>
+            <textarea id="dlDescription" placeholder="Décrivez précisément le contenu du document..." onblur="saveDownloadMetadataOnBlur()">${esc(file.description || '')}</textarea>
 
             <div class="downloads-prepared-zone">
                 <p id="downloadsPreparedPlaceholder" class="attachment-placeholder" style="margin:0">Prépare le fichier puis glisse-dépose le chip vers Storga.</p>
@@ -3237,15 +3425,97 @@ function renderDownloadsDetail() {
             </div>
         </div>
 
+        <div class="downloads-preview-panel">
+            <h4>Aperçu</h4>
+            <div id="downloadsNativePreview" class="downloads-native-preview">Chargement de l'aperçu...</div>
+        </div>
+
         <div class="downloads-actions">
-            <button onclick="prepareDownloadForDrop()"><i class="icon-paperclip"></i> Préparer pour glisser-déposer</button>
             <button onclick="savePreparedDownloadAs()"><i class="icon-download"></i> Enregistrer sous...</button>
-            <button onclick="openSelectedDownloadExternally()"><i class="icon-eye"></i> Ouvrir</button>
+            ${preferOnlyOffice
+                ? '<button onclick="openSelectedDownloadInOnlyOffice()"><i class="icon-file-edit"></i> Ouvrir dans OnlyOffice</button>'
+                : '<button onclick="openSelectedDownloadExternally()"><i class="icon-eye"></i> Ouvrir</button>'}
             <button class="danger" onclick="trashSelectedDownload()"><i class="icon-trash-2"></i> Mettre à la corbeille</button>
         </div>`;
 
     updateDownloadFilenamePreview();
     renderDownloadsPreparedZone();
+    renderDownloadsNativePreview(file);
+}
+
+async function openDownloadsBatchDropWindow() {
+    showLoading('Préparation de la fenêtre de dépôt...');
+    try {
+        const r = await fetch('/api/downloads/drop-candidates', { method: 'POST' });
+        const result = await r.json();
+        if (!r.ok || !result.ok) {
+            showToast('Erreur : ' + (result.error || 'chargement impossible'), 'error', 3600);
+            return;
+        }
+
+        const files = Array.isArray(result.files) ? result.files : [];
+        if (!files.length) {
+            showToast('Aucun fichier prêt: renseigne Nom 1, Nom 2 et Description.', 'warning', 3200);
+            return;
+        }
+
+        if (window.electronAPI?.launchDownloadsDragHelper) {
+            const launch = await window.electronAPI.launchDownloadsDragHelper({
+                files,
+                csvPath: result.csv_path || '',
+            });
+            if (!launch?.ok) {
+                showToast('Erreur : ' + (launch?.error || 'ouverture impossible'), 'error', 3600);
+                return;
+            }
+            showToast('Fenêtre native de dépôt ouverte.', 'success', 2400);
+            return;
+        }
+
+        showToast('Fenêtre native indisponible dans cette session.', 'error', 3600);
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 3600);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function renderDownloadsNativePreview(file) {
+    const target = document.getElementById('downloadsNativePreview');
+    if (!target) return;
+    if (!file?.path) {
+        target.textContent = 'Aucun fichier sélectionné.';
+        return;
+    }
+
+    const token = ++downloadsPreviewToken;
+    const ext = getDownloadExt(file);
+
+    if (ext === '.pdf') {
+        target.innerHTML = `<iframe class="downloads-native-frame" title="Aperçu PDF" src="${buildDownloadFileApiUrl(file.path)}"></iframe>`;
+        return;
+    }
+
+    if (ext === '.txt') {
+        target.innerHTML = '<div class="downloads-preview-loading">Lecture du texte...</div>';
+        try {
+            const r = await fetch(buildDownloadFileApiUrl(file.path));
+            const textContent = r.ok ? await r.text() : `Erreur d\'aperçu: ${r.status}`;
+            if (token !== downloadsPreviewToken) return;
+            target.innerHTML = `<pre class="downloads-txt-preview">${esc(textContent)}</pre>`;
+        } catch (e) {
+            if (token !== downloadsPreviewToken) return;
+            target.innerHTML = `<div class="downloads-preview-error">Erreur d'aperçu: ${esc(e.message || '')}</div>`;
+        }
+        return;
+    }
+
+    if (shouldOpenInOnlyOffice(file)) {
+        target.innerHTML = `<div class="downloads-preview-note">Ce format est ouvert via OnlyOffice.<br>Utilise le bouton <strong>Ouvrir dans OnlyOffice</strong>.</div>`;
+        return;
+    }
+
+    target.innerHTML = `<div class="downloads-preview-note">Aperçu natif non disponible pour ce format.</div>`;
 }
 
 async function prepareDownloadForDrop() {
@@ -3326,6 +3596,33 @@ async function openSelectedDownloadExternally() {
         }
     } catch (e) {
         showToast('Erreur ouverture : ' + e.message, 'error', 3200);
+    }
+}
+
+async function openSelectedDownloadInOnlyOffice() {
+    const file = getSelectedDownloadFile();
+    if (!file?.path) {
+        showToast('Sélectionne un fichier.', 'warning', 2400);
+        return;
+    }
+
+    showLoading('Ouverture dans OnlyOffice...');
+    try {
+        const r = await fetch('/api/downloads/open-onlyoffice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: file.path }),
+        });
+        const result = await r.json();
+        if (!r.ok || !result.ok) {
+            showToast('Erreur : ' + (result.error || 'OnlyOffice indisponible'), 'error', 3600);
+            return;
+        }
+        showToast('Fichier ouvert dans OnlyOffice.', 'success', 2600);
+    } catch (e) {
+        showToast('Erreur : ' + e.message, 'error', 3600);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -3414,13 +3711,24 @@ async function refreshMailProcessSummary() {
         const mails = await r.json();
         const pending = (Array.isArray(mails) ? mails : []).filter(m => !m.deleted && m.folder !== 'sent' && !m.processed && (m.mailbox || 'inbox') !== 'commercial');
         const pendingCount = pending.length;
+        const resumeState = getResumeMailProcessState();
         if (textEl) {
-            textEl.textContent = pendingCount > 0
-                ? `${pendingCount} mail(s) non traité(s) dans Reçus.`
-                : 'Aucun mail à traiter pour le moment.';
+            if (resumeState) {
+                textEl.textContent = `Reprise disponible au mail ${resumeState.index + 1}/${resumeState.queue.length}.`;
+            } else {
+                textEl.textContent = pendingCount > 0
+                    ? `${pendingCount} mail(s) non traité(s) dans Reçus.`
+                    : 'Aucun mail à traiter pour le moment.';
+            }
         }
-        if (mainBtn) mainBtn.disabled = pendingCount === 0;
-        if (topBtn) topBtn.disabled = pendingCount === 0;
+        if (mainBtn) {
+            mainBtn.disabled = pendingCount === 0;
+            mainBtn.textContent = resumeState ? 'Reprendre le traitement' : 'Lancer le traitement';
+        }
+        if (topBtn) {
+            topBtn.disabled = pendingCount === 0;
+            topBtn.textContent = resumeState ? 'Reprendre mes mails' : 'Traiter mes mails';
+        }
     } catch (e) {
         if (textEl) textEl.textContent = 'Impossible de charger le statut de traitement: ' + e.message;
         if (mainBtn) mainBtn.disabled = false;
@@ -3669,24 +3977,6 @@ async function fetchEmails(options = {}) {
     }
 }
 
-async function reclassifyCommercialMails() {
-    showLoading('Reclassification commerciale en cours…');
-    try {
-        const r = await fetch('/api/mail/reclassify-commercial', { method: 'POST' });
-        const result = await r.json();
-        if (!result.ok) {
-            showToast('Erreur : ' + (result.error || 'échec'), 'error', 4000);
-            return;
-        }
-        await loadInbox();
-        showToast(`${result.moved || 0} mail(s) reclassé(s).`, 'success', 2600);
-    } catch (e) {
-        showToast('Erreur : ' + e.message, 'error', 4000);
-    } finally {
-        hideLoading();
-    }
-}
-
 async function keepCommercialMail(mailId) {
     if (!mailId) return;
     showLoading('Déplacement vers les reçus…');
@@ -3749,16 +4039,17 @@ async function processMyMails() {
         await loadInbox();
     }
 
-    const ids = inboxMails
-        .filter(m => !m.deleted && m.folder !== 'sent' && !m.processed && (m.mailbox || 'inbox') !== 'commercial')
-        .sort((a, b) => {
-            const da = a.date ? new Date(a.date).getTime() : 0;
-            const db = b.date ? new Date(b.date).getTime() : 0;
-            return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
-        })
-        .map(m => m.id);
+    const resumeState = getResumeMailProcessState();
+    if (resumeState) {
+        startMailProcess(resumeState.queue, resumeState.skipStep1, resumeState.skipAttachments, resumeState.index);
+        return;
+    }
+
+    const ids = getProcessableInboxIds();
     if (!ids.length) {
         showToast('Aucun mail à traiter.', 'warning', 2500);
+        clearMailProcessProgress();
+        refreshMailProcessSummary();
         return;
     }
     startMailProcess(ids, false);

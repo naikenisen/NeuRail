@@ -897,6 +897,52 @@ ipcMain.handle('drag:launchHelper', async (_event, payload = {}) => {
   }
 });
 
+ipcMain.handle('drag:launchDownloadsHelper', async (_event, payload = {}) => {
+  try {
+    const files = Array.isArray(payload.files) ? payload.files : [];
+    const csvPath = String(payload.csvPath || '').trim();
+    if (!files.length) {
+      return { ok: false, error: 'Aucun fichier prêt à déposer' };
+    }
+    if (!csvPath) {
+      return { ok: false, error: 'Chemin CSV manquant' };
+    }
+
+    const helperScript = resourcePath(app, 'tools', 'drag_helper.py');
+    if (!fs.existsSync(helperScript)) {
+      return { ok: false, error: 'drag_helper.py introuvable' };
+    }
+
+    ensureDragTempDir();
+    cleanupOldDragFiles();
+
+    const manifestPath = path.join(DRAG_TEMP_DIR, `downloads_manifest_${Date.now()}.json`);
+    fs.writeFileSync(manifestPath, JSON.stringify({ files }, null, 2), 'utf-8');
+
+    if (dragHelperProcess && !dragHelperProcess.killed) {
+      try { dragHelperProcess.kill(); } catch {}
+    }
+
+    const args = [helperScript, '--manifest', manifestPath, '--csv', csvPath];
+    dragHelperProcess = spawn('python3', args, {
+      stdio: 'ignore',
+      detached: false,
+    });
+
+    dragHelperProcess.on('error', (err) => {
+      console.error('[drag:launchDownloadsHelper] Spawn error:', err.message);
+    });
+    dragHelperProcess.on('exit', () => {
+      dragHelperProcess = null;
+      try { fs.unlinkSync(manifestPath); } catch {}
+    });
+
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
 /* ═══════════════════════════════════════════════════════
    IPC Handlers — File System (scoped to app directory)
    ═══════════════════════════════════════════════════════ */

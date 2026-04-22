@@ -56,13 +56,11 @@
     <div class="tab-content" id="tab-inbox">
         <header>
             <div class="header-actions">
-                <button onclick="fetchEmails()"><i class="icon-refresh-cw"></i> Relever les mails</button>
                 <button onclick="openAccountsModal()"><i class="icon-user"></i> Comptes</button>
                 <div class="inbox-folder-switch" id="inboxFolderSwitch">
                     <button onclick="setInboxFolder('inbox')" id="inboxFolderInboxBtn" class="active"><i class="icon-inbox"></i> Reçus</button>
                     <button onclick="setInboxFolder('commercial')" id="inboxFolderCommercialBtn"><i class="icon-tag"></i> Commercial</button>
                 </div>
-                <button onclick="reclassifyCommercialMails()" id="btnReclassifyCommercial"><i class="icon-filter"></i> Filtrer commercial</button>
                 <button onclick="keepSelectedCommercialMail()" id="btnKeepCommercial" class="is-hidden"><i class="icon-bookmark"></i> Garder en reçus</button>
                 <button onclick="deleteAllCommercialMails()" id="btnDeleteCommercial" class="is-hidden"><i class="icon-trash-2"></i> Vider commercial</button>
             </div>
@@ -92,7 +90,6 @@
     <div class="tab-content" id="tab-mail-process">
         <header>
             <div class="header-actions">
-                <button onclick="fetchEmails()"><i class="icon-refresh-cw"></i> Relever les mails</button>
                 <button onclick="processMyMails()" id="btnProcessMailsFromTab"><i class="icon-sparkles"></i> Traiter mes mails</button>
             </div>
         </header>
@@ -102,7 +99,6 @@
                 <p id="mailProcessSummaryText">Chargement des mails à traiter...</p>
                 <div class="mail-process-actions">
                     <button class="btn-primary" onclick="processMyMails()" id="btnProcessMailsMain">Lancer le traitement</button>
-                    <button onclick="switchTab('inbox')">Ouvrir l'Inbox</button>
                 </div>
             </div>
         </div>
@@ -113,6 +109,7 @@
         <header>
             <div class="header-actions">
                 <button onclick="loadDownloadsManager()"><i class="icon-refresh-cw"></i> Rafraîchir</button>
+                <button onclick="openDownloadsBatchDropWindow()"><i class="icon-paperclip"></i> Préparer pour glisser-déposer</button>
             </div>
         </header>
 
@@ -646,6 +643,7 @@
                 <button class="btn-danger" onclick="mpDeleteFromServer()"><i class="icon-trash-2"></i> Supprimer du serveur</button>
                 <button class="btn-reply-delete" onclick="mpReplyAndDelete()"><i class="icon-reply"></i> Répondre à tous &amp; Supprimer</button>
                 <button class="btn-reply-keep" onclick="mpReplyAndKeep()"><i class="icon-reply"></i> Répondre à tous &amp; Conserver</button>
+                <button onclick="mpClassifyCommercial()"><i class="icon-tag"></i> Classer en commercial</button>
                 <button class="btn-primary" onclick="mpKeepMail()"><i class="icon-check"></i> Conserver</button>
             </div>
         </div>
